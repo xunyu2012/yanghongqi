@@ -1,0 +1,3614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>讯语AI-v1 · 无限画布工作室</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; margin: 0; overflow: hidden; background: #0c0c12; color: #e5e7eb; }
+    #viewport { position: fixed; inset: 0; cursor: grab; touch-action: none; }
+    #viewport.grabbing { cursor: grabbing; }
+    #canvas-layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+    #world { position: absolute; left: 0; top: 0; z-index: 2; }
+    #connections, #connections-hit {
+      position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none;
+    }
+    #connections { z-index: 1; }
+    #connections-hit { z-index: 3; }
+    #connections .link-vis-layer { pointer-events: none; }
+    #connections .link-disconnect-vis circle { transition: filter 0.15s, stroke 0.15s; }
+    #connections .link-disconnect-vis circle.is-hover {
+      filter: drop-shadow(0 0 6px rgba(244,114,182,0.55));
+      stroke: rgba(251,207,232,0.95);
+    }
+    #connections-hit .link-hit-layer { pointer-events: none; }
+    #connections-hit .link-hit-layer g.link-disconnect { pointer-events: all; cursor: pointer; }
+    #connections-hit .link-hit-layer g.link-disconnect-hit circle { fill: rgba(0,0,0,0.001); }
+    .studio-node {
+      position: absolute;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(165deg, rgba(30,27,45,0.95) 0%, rgba(15,15,25,0.98) 100%);
+      border: 1px solid rgba(139,92,246,0.25);
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
+      min-width: 200px;
+      min-height: 72px;
+      user-select: none;
+      box-sizing: border-box;
+    }
+    .node-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .node-resize-handle {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 16px;
+      height: 16px;
+      cursor: se-resize;
+      z-index: 25;
+      border-radius: 0 0 12px 0;
+      background: linear-gradient(135deg, transparent 52%, rgba(168,85,247,0.75) 52%);
+    }
+    .node-resize-handle:hover { background: linear-gradient(135deg, transparent 48%, rgba(236,72,153,0.85) 48%); }
+    .studio-node:active { cursor: grabbing; }
+    .node-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: grab;
+      border-radius: 14px 14px 0 0;
+      background: rgba(139,92,246,0.08);
+      flex-shrink: 0;
+    }
+    .studio-node > .node-body { padding: 12px 14px 14px; }
+    .port {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #8b5cf6;
+      border: 2px solid #1f2937;
+      z-index: 10;
+      pointer-events: auto;
+      box-sizing: border-box;
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .port:hover {
+      transform: translateY(-50%) scale(1.15);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.35);
+    }
+    .port-out { right: -7px; top: 50%; transform: translateY(-50%); cursor: crosshair; }
+    .port-out:hover { transform: translateY(-50%) scale(1.2); }
+    .port-in { left: -7px; top: 50%; transform: translateY(-50%); cursor: cell; }
+    .port-in:hover { transform: translateY(-50%) scale(1.2); }
+    #minimap {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      width: 160px;
+      height: 100px;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      z-index: 50;
+      overflow: hidden;
+    }
+    #minimap-view { position: absolute; border: 2px solid rgba(34,211,238,0.8); border-radius: 2px; pointer-events: none; }
+    .three-wrap {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 140px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #111;
+      position: relative;
+    }
+    .three-wrap.js-pano-active { outline: 2px solid rgba(34,211,238,0.55); outline-offset: 2px; }
+    .js-grid-stage-wrap {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(51,65,85,0.85);
+      background: linear-gradient(180deg, #0c0c12 0%, #06060a 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 28px rgba(0,0,0,0.45);
+    }
+    .js-grid-stage-bg { will-change: transform; pointer-events: none; }
+    .js-grid-stage-3d { position: absolute; inset: 0; z-index: 2; overflow: hidden; cursor: crosshair; }
+    .js-grid-stage-3d canvas { display: block; width: 100% !important; height: 100% !important; }
+    .js-grid-stage-hud {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 6;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      pointer-events: auto;
+    }
+    .js-grid-stage-hud button {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      border: 1px solid rgba(148,163,184,0.35);
+      background: rgba(15,23,42,0.88);
+      color: #e2e8f0;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    }
+    .js-grid-stage-hud button:hover { background: rgba(30,41,59,0.95); border-color: rgba(167,139,250,0.45); color: #fff; }
+    .grid-dummy-label {
+      width: 26px !important;
+      height: 26px !important;
+      line-height: 26px !important;
+      text-align: center;
+      background: rgba(255,255,255,0.96) !important;
+      color: #0f172a !important;
+      border-radius: 50% !important;
+      font-size: 12px !important;
+      font-weight: 800 !important;
+      border: 2px solid rgba(15,23,42,0.12) !important;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.35);
+      pointer-events: none;
+    }
+    .js-grid-toolbar {
+      background: rgba(15,15,22,0.95);
+      border: 1px solid rgba(51,65,85,0.65);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .js-grid-toolbar .grid-mode-on { background: rgba(139,92,246,0.5) !important; border-color: rgba(196,181,253,0.55) !important; color: #fff !important; }
+    .js-grid-tb-icon {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border-radius: 8px;
+      border: 1px solid rgba(71,85,105,0.6);
+      background: rgba(30,30,40,0.9);
+      color: #cbd5e1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .js-grid-tb-icon:hover { background: rgba(55,55,70,0.95); color: #fff; }
+    .js-grid-mode-dummy,
+    .js-grid-mode-camera { border: none !important; background: transparent !important; }
+    .js-grid-mode-wrap { display: flex; border-radius: 10px; overflow: hidden; border: 1px solid rgba(139,92,246,0.45); }
+    .hint-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 8px 16px;
+      background: rgba(12,12,18,0.92);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    #ctx-menu {
+      position: fixed;
+      z-index: 200;
+      min-width: 200px;
+      max-height: min(70vh, 420px);
+      overflow-y: auto;
+      padding: 6px 0;
+      background: rgba(22,22,32,0.98);
+      border: 1px solid rgba(139,92,246,0.35);
+      border-radius: 10px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+      display: none;
+    }
+    #ctx-menu.open { display: block; }
+    .ctx-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 14px;
+      font-size: 12px;
+      color: #e5e7eb;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+    .ctx-item:hover { background: rgba(139,92,246,0.2); color: #fff; }
+    .ctx-item.danger { color: #f87171; }
+    .ctx-item.danger:hover { background: rgba(239,68,68,0.15); }
+    .ctx-sep { height: 1px; margin: 6px 10px; background: rgba(255,255,255,0.08); }
+    .ctx-label { padding: 4px 14px 6px; font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+    @keyframes xunyu-hourglass-flip {
+      0% { transform: rotateX(0deg); }
+      100% { transform: rotateX(180deg); }
+    }
+    .xunyu-hourglass-i {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.75rem;
+      color: #fcd34a;
+      animation: xunyu-hourglass-flip 1.05s ease-in-out infinite alternate;
+      transform-style: preserve-3d;
+      line-height: 1;
+    }
+    #global-gen-wait {
+      position: fixed;
+      inset: 0;
+      z-index: 99990;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1.5rem;
+      background: rgba(8, 8, 12, 0.78);
+      backdrop-filter: blur(6px);
+      pointer-events: auto;
+    }
+    #global-gen-wait.is-on { display: flex; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="hint-bar">
+    <a href="/" class="text-purple-400 hover:text-purple-300 flex items-center gap-1"><i class="fa fa-arrow-left"></i> 返回超级编导</a>
+    <span class="text-gray-500">|</span>
+    <span class="text-gray-400"><i class="fa fa-hand-paper-o mr-1"></i>空白拖拽平移 · 滚轮缩放 · 资产生成<strong>小图预览</strong>可点击 · 下方「浏览器打开」可浏览并右键另存为 · 右键「资产生成」可<strong>添加微调</strong></span>
+    <button type="button" id="btn-reset-view" class="ml-auto px-3 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-xs">重置视图</button>
+    <span id="zoom-label" class="text-gray-500 tabular-nums">100%</span>
+  </div>
+
+  <div id="viewport" style="top: 41px;">
+    <div id="canvas-layer">
+      <svg id="connections" width="5000" height="5000" style="position:absolute;left:0;top:0;"></svg>
+      <div id="world"></div>
+      <svg id="connections-hit" width="5000" height="5000" style="position:absolute;left:0;top:0;"></svg>
+    </div>
+  </div>
+
+  <div id="minimap">
+    <canvas id="minimap-canvas" width="160" height="100" class="w-full h-full"></canvas>
+    <div id="minimap-view"></div>
+  </div>
+
+  <div id="ctx-menu" role="menu" aria-label="画布菜单"></div>
+
+  <input type="file" id="input-pano" accept="image/*" class="hidden">
+  <input type="file" id="input-char" accept="image/*" class="hidden">
+  <input type="file" id="input-prop" accept="image/*" class="hidden">
+  <input type="file" id="input-scene" accept="image/*" class="hidden">
+
+  <div id="global-gen-wait" aria-live="polite" aria-busy="false">
+    <i class="fa fa-hourglass-half xunyu-hourglass-i" aria-hidden="true"></i>
+    <p class="global-gen-wait-text text-center text-sm text-amber-100/95 max-w-sm px-2">正在处理，请稍候…</p>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    const WORLD_W = 4200;
+    const WORLD_H = 2800;
+
+    let __globalGenWaitDepth = 0;
+    function showGlobalGenWait(msg) {
+      __globalGenWaitDepth++;
+      const el = document.getElementById('global-gen-wait');
+      if (!el) return;
+      const t = el.querySelector('.global-gen-wait-text');
+      if (t) t.textContent = msg || '正在处理，请稍候…';
+      el.classList.add('is-on');
+      el.setAttribute('aria-busy', 'true');
+    }
+    function hideGlobalGenWait() {
+      __globalGenWaitDepth = Math.max(0, __globalGenWaitDepth - 1);
+      if (__globalGenWaitDepth > 0) return;
+      const el = document.getElementById('global-gen-wait');
+      if (!el) return;
+      el.classList.remove('is-on');
+      el.removeAttribute('aria-busy');
+    }
+
+    const GRID_STAGE_HALF_X = 3.85;
+    const GRID_STAGE_HALF_Z = 2.18;
+    const _gridGroundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+    function pctToWorldX(xPct) {
+      return ((xPct - 50) / 50) * GRID_STAGE_HALF_X;
+    }
+    function pctToWorldZ(yPct) {
+      return ((yPct - 50) / 50) * GRID_STAGE_HALF_Z;
+    }
+    function worldToPctX(wx) {
+      return (wx / GRID_STAGE_HALF_X) * 50 + 50;
+    }
+    function worldToPctZ(wz) {
+      return (wz / GRID_STAGE_HALF_Z) * 50 + 50;
+    }
+
+    function groundHitFromClient(gridId, clientX, clientY) {
+      const gt = state.nodes[gridId]?.gridThree;
+      if (!gt?.container) return null;
+      const rect = gt.container.getBoundingClientRect();
+      const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
+      gt.raycaster.setFromCamera({ x: ndcX, y: ndcY }, gt.camera);
+      const out = new THREE.Vector3();
+      if (gt.raycaster.ray.intersectPlane(_gridGroundPlane, out)) return out;
+      return null;
+    }
+
+    const state = {
+      tx: 120,
+      ty: 80,
+      scale: 0.65,
+      panning: false,
+      px: 0,
+      py: 0,
+      draggingNode: null,
+      dragOffX: 0,
+      dragOffY: 0,
+      nodes: {},
+      links: [],
+      linking: null,
+      nodeSeq: 0,
+      sceneShot: null,
+      charA: null,
+      charB: null,
+      gridSlot: 13,
+      charYaw: 0,
+      panoTexture: null,
+      activePanoNodeId: null,
+      fileTargetPanoNodeId: null,
+      fileTargetCharNodeId: null,
+      fileTargetPropNodeId: null,
+      fileTargetSceneNodeId: null,
+      ctxSpawn: { x: 120, y: 120 },
+      figureDrag: null,
+      gridStageInteract: null,
+      gridStagePan: null,
+      resizingNode: null,
+      /** 编导带入：全景 URL 优先，否则分镜成图；站位底图无截屏时用 */
+      directorGridFallbackBgUrl: '',
+    };
+
+    window.__directorCanvasInitPayload = null;
+
+    function parseDirectorCanvasShotRaw(raw) {
+      try {
+        const o = raw ? JSON.parse(raw) : null;
+        if (o && typeof o === 'object' && Number.isFinite(o.shotIdx)) return o;
+      } catch (_) {}
+      return null;
+    }
+
+    function assetUrlKeyCanvas(s) {
+      const t = String(s || '').trim();
+      if (!t) return '';
+      try {
+        const x = new URL(t, window.location.origin);
+        let path = x.pathname || '';
+        if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
+        return (x.origin + path + (x.search || '')).toLowerCase();
+      } catch (_) {
+        return t.toLowerCase();
+      }
+    }
+
+    /** 与超级编导 payload.assetsSnapshot 对照，区分演员 / 道具 / 场景参考 */
+    function classifyRefUrlAgainstSnapshot(refAbs, snap) {
+      if (!snap || typeof snap !== 'object') return 'other';
+      const key = assetUrlKeyCanvas(refAbs);
+      function hasArr(arr) {
+        if (!Array.isArray(arr)) return false;
+        return arr.some((iu) => {
+          const u = String(iu || '').trim();
+          if (!u) return false;
+          try {
+            const a = new URL(u, window.location.origin).href;
+            return assetUrlKeyCanvas(a) === key || a === refAbs;
+          } catch (_) {
+            return u === refAbs;
+          }
+        });
+      }
+      if (hasArr(snap.props)) return 'prop';
+      if (hasArr(snap.actors)) return 'actor';
+      if (hasArr(snap.scenes)) return 'scene';
+      return 'other';
+    }
+
+    function getDirectorCanvasPayload() {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('from') !== 'director') return null;
+      const inj = window.__directorCanvasInitPayload;
+      if (inj && typeof inj === 'object' && Number.isFinite(inj.shotIdx)) return inj;
+      try {
+        const o = parseDirectorCanvasShotRaw(sessionStorage.getItem('director_canvas_shot'));
+        if (o) return o;
+      } catch (_) {}
+      try {
+        if (window.parent !== window && sp.get('embed') === '1') {
+          const o = parseDirectorCanvasShotRaw(window.parent.sessionStorage.getItem('director_canvas_shot'));
+          if (o) return o;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    function isDirectorEmbed() {
+      return new URLSearchParams(window.location.search).get('embed') === '1';
+    }
+
+    function notifyDirectorShotImage(url) {
+      const p = getDirectorCanvasPayload();
+      if (!p || !Number.isFinite(p.shotIdx) || !url) return;
+      const u = String(url).trim();
+      if (!u) return;
+      if (isDirectorEmbed() && window.parent !== window) {
+        try {
+          window.parent.postMessage(
+            { type: 'xunyu-director-shot-image', shotIdx: p.shotIdx, imageUrl: u },
+            window.location.origin
+          );
+        } catch (_) {}
+        return;
+      }
+      try {
+        const ch = new BroadcastChannel('xunyu-director-canvas');
+        ch.postMessage({ type: 'shot-image', shotIdx: p.shotIdx, imageUrl: u });
+        ch.close();
+      } catch (_) {}
+    }
+
+    window.__canvasDirectorSetLastGen = () => {};
+
+    const NODE_ADD_SPECS = [
+      { type: 'pano', label: '360° 全景场景', icon: 'fa-globe' },
+      { type: 'scene', label: '图片场景', icon: 'fa-image' },
+      { type: 'char', label: '角色三视图', icon: 'fa-user' },
+      { type: 'prop', label: '道具参考', icon: 'fa-cube' },
+      { type: 'grid', label: '站位 · 角度调教', icon: 'fa-th' },
+      { type: 'gen', label: '资产生成', icon: 'fa-magic' },
+    ];
+
+    const ctxMenuEl = document.getElementById('ctx-menu');
+
+    function closeCtxMenu() {
+      ctxMenuEl.classList.remove('open');
+      ctxMenuEl.innerHTML = '';
+    }
+
+    function openCtxMenu(clientX, clientY, options) {
+      const { targetNodeId, targetNodeType } = options || {};
+      ctxMenuEl.innerHTML = '';
+      if (targetNodeId) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'ctx-item danger';
+        del.textContent = '删除此节点';
+        del.addEventListener('click', () => {
+          removeNode(targetNodeId);
+          closeCtxMenu();
+        });
+        ctxMenuEl.appendChild(del);
+        if (targetNodeType === 'char') {
+          const addCh = document.createElement('button');
+          addCh.type = 'button';
+          addCh.className = 'ctx-item';
+          addCh.innerHTML = '<i class="fa fa-plus text-green-400 mr-2 w-4"></i>再添加一个角色三视图';
+          addCh.addEventListener('click', () => {
+            spawnNode('char', state.ctxSpawn.x, state.ctxSpawn.y);
+            state.ctxSpawn.x += 28;
+            state.ctxSpawn.y += 28;
+            closeCtxMenu();
+          });
+          ctxMenuEl.appendChild(addCh);
+        }
+        if (targetNodeType === 'prop') {
+          const addPr = document.createElement('button');
+          addPr.type = 'button';
+          addPr.className = 'ctx-item';
+          addPr.innerHTML = '<i class="fa fa-plus text-amber-400 mr-2 w-4"></i>再添加一个道具参考';
+          addPr.addEventListener('click', () => {
+            spawnNode('prop', state.ctxSpawn.x, state.ctxSpawn.y);
+            state.ctxSpawn.x += 28;
+            state.ctxSpawn.y += 28;
+            closeCtxMenu();
+          });
+          ctxMenuEl.appendChild(addPr);
+        }
+        if (targetNodeType === 'scene') {
+          const addSc = document.createElement('button');
+          addSc.type = 'button';
+          addSc.className = 'ctx-item';
+          addSc.innerHTML = '<i class="fa fa-plus text-sky-400 mr-2 w-4"></i>再添加一个图片场景';
+          addSc.addEventListener('click', () => {
+            spawnNode('scene', state.ctxSpawn.x, state.ctxSpawn.y);
+            state.ctxSpawn.x += 28;
+            state.ctxSpawn.y += 28;
+            closeCtxMenu();
+          });
+          ctxMenuEl.appendChild(addSc);
+        }
+        if (targetNodeType === 'gen') {
+          const addRf = document.createElement('button');
+          addRf.type = 'button';
+          addRf.className = 'ctx-item';
+          addRf.innerHTML =
+            '<i class="fa fa-pencil text-amber-400 mr-2 w-4"></i>添加微调节点（连线 · 二次生成）';
+          addRf.addEventListener('click', () => {
+            spawnRefineLinkedToGen(targetNodeId);
+            closeCtxMenu();
+          });
+          ctxMenuEl.appendChild(addRf);
+        }
+        const sep = document.createElement('div');
+        sep.className = 'ctx-sep';
+        ctxMenuEl.appendChild(sep);
+      }
+      const lab = document.createElement('div');
+      lab.className = 'ctx-label';
+      lab.textContent = '添加节点';
+      ctxMenuEl.appendChild(lab);
+      NODE_ADD_SPECS.forEach((spec) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ctx-item';
+        b.innerHTML = '<i class="fa ' + spec.icon + ' text-purple-400 mr-2 w-4"></i>' + spec.label;
+        b.addEventListener('click', () => {
+          spawnNode(spec.type, state.ctxSpawn.x, state.ctxSpawn.y);
+          state.ctxSpawn.x += 28;
+          state.ctxSpawn.y += 28;
+          closeCtxMenu();
+        });
+        ctxMenuEl.appendChild(b);
+      });
+      ctxMenuEl.classList.add('open');
+      const pad = 8;
+      let x = clientX + pad;
+      let y = clientY + pad;
+      const mw = ctxMenuEl.offsetWidth || 220;
+      const mh = ctxMenuEl.offsetHeight || 300;
+      if (x + mw > window.innerWidth - pad) x = window.innerWidth - mw - pad;
+      if (y + mh > window.innerHeight - pad) y = window.innerHeight - mh - pad;
+      ctxMenuEl.style.left = Math.max(pad, x) + 'px';
+      ctxMenuEl.style.top = Math.max(pad, y) + 'px';
+    }
+
+    window.addEventListener('click', (e) => {
+      if (!ctxMenuEl.classList.contains('open')) return;
+      if (e.target.closest('#ctx-menu')) return;
+      closeCtxMenu();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeCtxMenu();
+    });
+
+    const viewport = document.getElementById('viewport');
+    const canvasLayer = document.getElementById('canvas-layer');
+    const world = document.getElementById('world');
+    const svg = document.getElementById('connections');
+    const svgHit = document.getElementById('connections-hit');
+    world.style.width = WORLD_W + 'px';
+    world.style.height = WORLD_H + 'px';
+    canvasLayer.style.width = WORLD_W + 'px';
+    canvasLayer.style.height = WORLD_H + 'px';
+    svg.setAttribute('width', WORLD_W);
+    svg.setAttribute('height', WORLD_H);
+    svgHit.setAttribute('width', WORLD_W);
+    svgHit.setAttribute('height', WORLD_H);
+
+    function applyTransform() {
+      canvasLayer.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
+      document.getElementById('zoom-label').textContent = Math.round(state.scale * 100) + '%';
+      drawConnections();
+      drawMinimap();
+    }
+
+    function clientToWorld(clientX, clientY) {
+      const r = viewport.getBoundingClientRect();
+      const x = (clientX - r.left - state.tx) / state.scale;
+      const y = (clientY - r.top - state.ty) / state.scale;
+      return { x, y };
+    }
+
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.target.closest('[data-link-id]')) return;
+      if (e.target.closest('.port')) return;
+      if (e.target.closest('.studio-node') || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('select') || e.target.closest('textarea')) return;
+      state.panning = true;
+      state.px = e.clientX - state.tx;
+      state.py = e.clientY - state.ty;
+      viewport.classList.add('grabbing');
+    });
+
+    viewport.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('#ctx-menu')) return;
+      if (e.target.closest('[data-link-id]')) {
+        e.preventDefault();
+        return;
+      }
+      if (e.target.closest('.port')) {
+        e.preventDefault();
+        return;
+      }
+      const nodeEl = e.target.closest('.studio-node');
+      if (nodeEl && (e.target.closest('input') || e.target.closest('textarea') || e.target.closest('select'))) {
+        return;
+      }
+      e.preventDefault();
+      state.ctxSpawn = clientToWorld(e.clientX, e.clientY);
+      const targetNodeId = nodeEl && nodeEl.dataset.nodeKey ? nodeEl.dataset.nodeKey : null;
+      const targetNodeType = nodeEl && nodeEl.dataset.nodeType ? nodeEl.dataset.nodeType : null;
+      openCtxMenu(e.clientX, e.clientY, { targetNodeId, targetNodeType });
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (state.resizingNode) {
+        const r = state.resizingNode;
+        const n = state.nodes[r.id];
+        if (n?.el) {
+          const dx = (e.clientX - r.startCX) / state.scale;
+          const dy = (e.clientY - r.startCY) / state.scale;
+          const nw = Math.max(r.minW, r.origW + dx);
+          const nh = Math.max(r.minH, r.origH + dy);
+          n.el.style.width = nw + 'px';
+          n.el.style.height = nh + 'px';
+          if (n.type === 'pano') resizePanoRendererToContainer(r.id);
+          if (n.type === 'grid') resizeGridStageThree(r.id);
+          drawConnections();
+          drawMinimap();
+        }
+        return;
+      }
+      if (state.gridStageInteract) {
+        const g = state.gridStageInteract;
+        const gn = state.nodes[g.gridId];
+        const st = gn?.stage;
+        const gt = gn?.gridThree;
+        if (!st || !gt || !st.figures[g.idx]) {
+          state.gridStageInteract = null;
+        } else if (g.kind === 'move') {
+          const hit = groundHitFromClient(g.gridId, e.clientX, e.clientY);
+          const fig = st.figures[g.idx];
+          if (hit && g.lastWorld) {
+            const dx = hit.x - g.lastWorld.x;
+            const dz = hit.z - g.lastWorld.z;
+            let wx = pctToWorldX(fig.xPct) + dx;
+            let wz = pctToWorldZ(fig.yPct) + dz;
+            fig.xPct = Math.max(4, Math.min(96, worldToPctX(wx)));
+            fig.yPct = Math.max(4, Math.min(96, worldToPctZ(wz)));
+            g.lastWorld.copy(hit);
+            syncGridStageThree(g.gridId);
+          }
+        } else if (g.kind === 'yaw') {
+          const fig = st.figures[g.idx];
+          const d = (e.clientX - g.startX) * 0.48;
+          fig.yawDeg = ((g.startYaw + d) % 360 + 360) % 360;
+          syncGridStageThree(g.gridId);
+          if (st.selectedFigureIndex === g.idx) syncGridYawSliderUI(gn, fig.yawDeg);
+        }
+        return;
+      }
+      if (state.gridStagePan) {
+        const gn = state.nodes[state.gridStagePan.gridId];
+        if (gn?.stage) {
+          const dx = e.clientX - state.gridStagePan.startX;
+          const dy = e.clientY - state.gridStagePan.startY;
+          gn.stage.cameraPanX = state.gridStagePan.origPx + dx * 0.2;
+          gn.stage.cameraPanY = state.gridStagePan.origPy + dy * 0.2;
+          applyGridStageCamera(gn);
+        }
+        return;
+      }
+      if (state.linking) {
+        const w = clientToWorld(e.clientX, e.clientY);
+        state.linking.curX = w.x;
+        state.linking.curY = w.y;
+        drawConnections();
+        return;
+      }
+      if (state.draggingNode) {
+        const w = clientToWorld(e.clientX, e.clientY);
+        state.draggingNode.el.style.left = w.x - state.dragOffX + 'px';
+        state.draggingNode.el.style.top = w.y - state.dragOffY + 'px';
+        state.nodes[state.draggingNode.id].x = parseFloat(state.draggingNode.el.style.left);
+        state.nodes[state.draggingNode.id].y = parseFloat(state.draggingNode.el.style.top);
+        drawConnections();
+        drawMinimap();
+        return;
+      }
+      if (!state.panning) return;
+      state.tx = e.clientX - state.px;
+      state.ty = e.clientY - state.py;
+      applyTransform();
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (state.resizingNode) {
+        const id = state.resizingNode.id;
+        state.resizingNode = null;
+        if (state.nodes[id]?.type === 'pano') resizePanoRendererToContainer(id);
+        if (state.nodes[id]?.type === 'grid') resizeGridStageThree(id);
+      }
+      state.figureDrag = null;
+      state.gridStageInteract = null;
+      state.gridStagePan = null;
+      if (state.linking) {
+        const stack = document.elementsFromPoint(e.clientX, e.clientY);
+        const pin = stack.find((el) => el.matches && el.matches('[data-port-type="in"]'));
+        if (pin) {
+          const node = pin.closest('[data-node-key]');
+          const to = node && node.dataset.nodeKey;
+          if (to && to !== state.linking.from) addLink(state.linking.from, to);
+        }
+        state.linking = null;
+        drawConnections();
+      }
+      state.panning = false;
+      state.draggingNode = null;
+      viewport.classList.remove('grabbing');
+    });
+
+    viewport.addEventListener('wheel', (e) => {
+      if (e.target.closest('.js-three-host')) return;
+      if (e.target.closest('.js-grid-stage')) return;
+      e.preventDefault();
+      const r = viewport.getBoundingClientRect();
+      const mx = e.clientX - r.left;
+      const my = e.clientY - r.top;
+      const wx = (mx - state.tx) / state.scale;
+      const wy = (my - state.ty) / state.scale;
+      const delta = e.deltaY > 0 ? 0.92 : 1.09;
+      const newScale = Math.min(2.2, Math.max(0.12, state.scale * delta));
+      state.tx = mx - wx * newScale;
+      state.ty = my - wy * newScale;
+      state.scale = newScale;
+      applyTransform();
+    }, { passive: false });
+
+    document.getElementById('btn-reset-view').addEventListener('click', () => {
+      state.tx = 120;
+      state.ty = 80;
+      state.scale = 0.65;
+      applyTransform();
+    });
+
+    const NODE_MIN_SIZE = {
+      default: { w: 220, h: 100 },
+      pano: { w: 260, h: 220 },
+      scene: { w: 240, h: 180 },
+      char: { w: 240, h: 180 },
+      prop: { w: 220, h: 160 },
+      grid: { w: 360, h: 280 },
+      gen: { w: 300, h: 200 },
+      refine: { w: 260, h: 200 },
+    };
+
+    function resizePanoRendererToContainer(nodeId) {
+      const p = state.nodes[nodeId]?.panothree;
+      if (!p?.container) return;
+      const cw = p.container.clientWidth || 320;
+      const ch = Math.max(120, p.container.clientHeight || 200);
+      p.camera.aspect = cw / ch;
+      p.camera.updateProjectionMatrix();
+      p.renderer.setSize(cw, ch);
+    }
+
+    function registerNode(id, el, x, y, type) {
+      el.dataset.nodeKey = id;
+      el.dataset.nodeType = type;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      state.nodes[id] = {
+        id,
+        el,
+        x,
+        y,
+        type,
+        panothree: null,
+        gridThree: null,
+        charUrl: null,
+        propUrl: null,
+        sceneUrl: null,
+        lastCaptureDataUrl: null,
+        lastSnapshotDataUrl: null,
+        lastGenImageUrl: null,
+        lastGenPrompt: null,
+        lastRefineImageUrl: null,
+      };
+      const header = el.querySelector('.node-header');
+      header.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+        const w = clientToWorld(ev.clientX, ev.clientY);
+        const cur = state.nodes[id];
+        state.draggingNode = { id, el };
+        state.dragOffX = w.x - cur.x;
+        state.dragOffY = w.y - cur.y;
+      });
+      const mins = NODE_MIN_SIZE[type] || NODE_MIN_SIZE.default;
+      const rh = document.createElement('div');
+      rh.className = 'node-resize-handle';
+      rh.title = '拖拽调整节点大小';
+      rh.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        const rect = el.getBoundingClientRect();
+        state.resizingNode = {
+          id,
+          startCX: ev.clientX,
+          startCY: ev.clientY,
+          origW: el.offsetWidth,
+          origH: el.offsetHeight || rect.height,
+          minW: mins.w,
+          minH: mins.h,
+        };
+      });
+      el.appendChild(rh);
+    }
+
+    function getPortWorldCenter(nodeKey, dir) {
+      const n = state.nodes[nodeKey];
+      if (!n) return { x: 0, y: 0 };
+      const sel = dir === 'out' ? '.port-out' : '.port-in';
+      const port = n.el.querySelector(sel);
+      if (!port) return { x: n.x + (dir === 'out' ? n.el.offsetWidth : 0), y: n.y + n.el.offsetHeight / 2 };
+      const pr = port.getBoundingClientRect();
+      const vr = viewport.getBoundingClientRect();
+      return {
+        x: (pr.left + pr.width / 2 - vr.left - state.tx) / state.scale,
+        y: (pr.top + pr.height / 2 - vr.top - state.ty) / state.scale,
+      };
+    }
+
+    function bezierD(x1, y1, x2, y2) {
+      const mx = (x1 + x2) / 2;
+      return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+    }
+
+    function bezierMidpoint(x1, y1, x2, y2) {
+      const mx = (x1 + x2) / 2;
+      const t = 0.5;
+      const p0x = x1;
+      const p0y = y1;
+      const p1x = mx;
+      const p1y = y1;
+      const p2x = mx;
+      const p2y = y2;
+      const p3x = x2;
+      const p3y = y2;
+      const u = 1 - t;
+      const c0 = u * u * u;
+      const c1 = 3 * u * u * t;
+      const c2 = 3 * u * t * t;
+      const c3 = t * t * t;
+      return {
+        x: c0 * p0x + c1 * p1x + c2 * p2x + c3 * p3x,
+        y: c0 * p0y + c1 * p1y + c2 * p2y + c3 * p3y,
+      };
+    }
+
+    function addLink(from, to) {
+      if (from === to) return;
+      const A = state.nodes[from];
+      const B = state.nodes[to];
+      if (!A || !B) return;
+      if (!A.el.querySelector('.port-out') || !B.el.querySelector('.port-in')) return;
+      if (state.links.some((l) => l.from === from && l.to === to)) return;
+      state.links.push({
+        id: 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        from,
+        to,
+      });
+      drawConnections();
+      refreshAllGrids();
+    }
+
+    function removeLink(id) {
+      state.links = state.links.filter((l) => l.id !== id);
+      drawConnections();
+      refreshAllGrids();
+    }
+
+    function ensureGridStage(n) {
+      if (!n.stage) {
+        n.stage = {
+          cameraZoom: 1,
+          cameraPanX: 0,
+          cameraPanY: 0,
+          figures: [],
+          selectedFigureIndex: -1,
+          viewMode: 'dummy',
+          orbitAzim: 0.55,
+          orbitElev: 0.32,
+          orbitDist: 8.4,
+          orbitTargetY: 0.42,
+          formCols: 3,
+          formRows: 3,
+          floorOpacity: 0.42,
+        };
+      } else {
+        if (n.stage.viewMode !== 'dummy' && n.stage.viewMode !== 'camera') n.stage.viewMode = 'dummy';
+        if (n.stage.orbitAzim == null) n.stage.orbitAzim = 0.55;
+        if (n.stage.orbitElev == null) n.stage.orbitElev = 0.32;
+        if (n.stage.orbitDist == null) n.stage.orbitDist = 8.4;
+        if (n.stage.orbitTargetY == null) n.stage.orbitTargetY = 0.42;
+        if (n.stage.formCols == null) n.stage.formCols = 3;
+        if (n.stage.formRows == null) n.stage.formRows = 3;
+        if (n.stage.floorOpacity == null) n.stage.floorOpacity = 0.42;
+        n.stage.figures.forEach((f) => {
+          if (f.scale == null || Number.isNaN(f.scale)) f.scale = 1;
+          if (f.hidden === undefined) f.hidden = false;
+        });
+      }
+      return n.stage;
+    }
+
+    function charIdsLinkedToGridInOrder(gridId) {
+      const ids = [];
+      const seen = new Set();
+      for (let i = 0; i < state.links.length; i++) {
+        const l = state.links[i];
+        if (l.to !== gridId) continue;
+        const from = state.nodes[l.from];
+        if (from?.type !== 'char' || seen.has(from.id)) continue;
+        seen.add(from.id);
+        ids.push(from.id);
+      }
+      return ids;
+    }
+
+    function getAnyPanoCaptureUrl() {
+      for (const id of Object.keys(state.nodes)) {
+        const pn = state.nodes[id];
+        if (pn.type === 'pano' && pn.lastCaptureDataUrl) return pn.lastCaptureDataUrl;
+      }
+      return '';
+    }
+
+    function syncGridFromLinks(gridId) {
+      const n = state.nodes[gridId];
+      if (!n || n.type !== 'grid') return;
+      const st = ensureGridStage(n);
+      const incomers = state.links
+        .filter((l) => l.to === gridId)
+        .map((l) => state.nodes[l.from])
+        .filter(Boolean);
+      let url = '';
+      const panoLinked = incomers.filter((x) => x.type === 'pano');
+      for (const p of panoLinked) {
+        if (p.lastCaptureDataUrl) {
+          url = p.lastCaptureDataUrl;
+          break;
+        }
+      }
+      if (!url) url = getAnyPanoCaptureUrl();
+      if (!url) {
+        const sceneLinked = incomers.filter((x) => x.type === 'scene' && x.sceneUrl);
+        for (const s of sceneLinked) {
+          url = s.sceneUrl;
+          break;
+        }
+      }
+      if (!url) {
+        const fb = String(state.directorGridFallbackBgUrl || '').trim();
+        if (fb) url = fb;
+      }
+      const bg = n.el.querySelector('.js-grid-stage-bg');
+      if (bg) {
+        if (url) {
+          bg.style.background = '';
+          bg.style.backgroundImage = 'url("' + url.replace(/"/g, '\\"') + '")';
+          bg.style.backgroundSize = 'cover';
+          bg.style.backgroundPosition = 'center';
+          bg.style.backgroundRepeat = 'no-repeat';
+        } else {
+          bg.style.backgroundImage = '';
+          bg.style.background = 'linear-gradient(180deg, rgba(30,30,45,0.95), rgba(10,10,18,0.98))';
+        }
+      }
+      const charIdsOrdered = charIdsLinkedToGridInOrder(gridId);
+      while (st.figures.length < charIdsOrdered.length) {
+        const j = st.figures.length;
+        st.figures.push({
+          charNodeId: null,
+          xPct: 18 + (j % 6) * 11,
+          yPct: 26 + Math.floor(j / 6) * 14,
+          yawDeg: 0,
+          scale: 1,
+          hidden: false,
+        });
+      }
+      st.figures.forEach((f, i) => {
+        f.charNodeId = i < charIdsOrdered.length ? charIdsOrdered[i] : null;
+        if (f.scale == null) f.scale = 1;
+        if (f.hidden === undefined) f.hidden = false;
+      });
+      if (st.selectedFigureIndex >= st.figures.length) st.selectedFigureIndex = st.figures.length ? 0 : -1;
+      applyGridStageCamera(n);
+      syncGridStageThree(gridId);
+    }
+
+    function applyGridStageCamera(n) {
+      const bg = n.el?.querySelector('.js-grid-stage-bg');
+      if (!bg || !n.stage) return;
+      const z = n.stage.cameraZoom;
+      const px = n.stage.cameraPanX;
+      const py = n.stage.cameraPanY;
+      bg.style.transformOrigin = 'center center';
+      bg.style.transform = 'scale(' + z + ') translate(' + px + 'px, ' + py + 'px)';
+    }
+
+    function refreshAllGrids() {
+      for (const id of Object.keys(state.nodes)) {
+        if (state.nodes[id].type === 'grid') syncGridFromLinks(id);
+      }
+    }
+
+    function drawConnections() {
+      const NS = 'http://www.w3.org/2000/svg';
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      while (svgHit.firstChild) svgHit.removeChild(svgHit.firstChild);
+      const gVis = document.createElementNS(NS, 'g');
+      gVis.setAttribute('class', 'link-vis-layer');
+      const gHit = document.createElementNS(NS, 'g');
+      gHit.setAttribute('class', 'link-hit-layer');
+
+      state.links.forEach((link) => {
+        const p1 = getPortWorldCenter(link.from, 'out');
+        const p2 = getPortWorldCenter(link.to, 'in');
+        const d = bezierD(p1.x, p1.y, p2.x, p2.y);
+        const lid = link.id;
+
+        const mid = bezierMidpoint(p1.x, p1.y, p2.x, p2.y);
+
+        const vis = document.createElementNS(NS, 'path');
+        vis.setAttribute('d', d);
+        vis.setAttribute('stroke', 'rgba(168,85,247,0.55)');
+        vis.setAttribute('stroke-width', '2');
+        vis.setAttribute('fill', 'none');
+        gVis.appendChild(vis);
+
+        const discVis = document.createElementNS(NS, 'g');
+        discVis.setAttribute('class', 'link-disconnect-vis');
+        discVis.setAttribute('transform', `translate(${mid.x},${mid.y})`);
+        const dcVis = document.createElementNS(NS, 'circle');
+        dcVis.setAttribute('r', '12');
+        dcVis.setAttribute('fill', 'rgba(18,16,28,0.96)');
+        dcVis.setAttribute('stroke', 'rgba(244,114,182,0.88)');
+        dcVis.setAttribute('stroke-width', '1.5');
+        const dxVis = document.createElementNS(NS, 'text');
+        dxVis.setAttribute('text-anchor', 'middle');
+        dxVis.setAttribute('dominant-baseline', 'central');
+        dxVis.setAttribute('y', '0.5');
+        dxVis.setAttribute('font-size', '16');
+        dxVis.setAttribute('font-weight', '700');
+        dxVis.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+        dxVis.setAttribute('fill', '#fce7f3');
+        dxVis.textContent = '\u00D7';
+        discVis.appendChild(dcVis);
+        discVis.appendChild(dxVis);
+        gVis.appendChild(discVis);
+
+        const discHit = document.createElementNS(NS, 'g');
+        discHit.setAttribute('class', 'link-disconnect link-disconnect-hit');
+        discHit.setAttribute('transform', `translate(${mid.x},${mid.y})`);
+        discHit.setAttribute('data-link-id', lid);
+        discHit.setAttribute('role', 'button');
+        discHit.setAttribute('aria-label', '断开连线');
+        const dcHit = document.createElementNS(NS, 'circle');
+        dcHit.setAttribute('r', '14');
+        dcHit.setAttribute('fill', 'rgba(0,0,0,0.001)');
+        dcHit.setAttribute('stroke', 'none');
+        discHit.appendChild(dcHit);
+        const doDisconnect = (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+          removeLink(lid);
+        };
+        discHit.addEventListener('click', doDisconnect);
+        discHit.addEventListener('mousedown', (ev) => {
+          ev.stopPropagation();
+        });
+        discHit.addEventListener('mouseenter', () => {
+          dcVis.classList.add('is-hover');
+        });
+        discHit.addEventListener('mouseleave', () => {
+          dcVis.classList.remove('is-hover');
+        });
+        gHit.appendChild(discHit);
+      });
+
+      if (state.linking) {
+        const d = bezierD(state.linking.sx, state.linking.sy, state.linking.curX, state.linking.curY);
+        const ghost = document.createElementNS(NS, 'path');
+        ghost.setAttribute('d', d);
+        ghost.setAttribute('stroke', '#22d3ee');
+        ghost.setAttribute('stroke-width', '2');
+        ghost.setAttribute('stroke-dasharray', '10 5');
+        ghost.setAttribute('fill', 'none');
+        gVis.appendChild(ghost);
+      }
+
+      svg.appendChild(gVis);
+      svgHit.appendChild(gHit);
+    }
+
+    world.addEventListener(
+      'mousedown',
+      (ev) => {
+        const port = ev.target.closest('.port-out');
+        if (!port || !world.contains(port)) return;
+        ev.stopPropagation();
+        ev.preventDefault();
+        const node = port.closest('[data-node-key]');
+        if (!node) return;
+        const from = node.dataset.nodeKey;
+        const p = getPortWorldCenter(from, 'out');
+        state.linking = { from, sx: p.x, sy: p.y, curX: p.x, curY: p.y };
+        state.panning = false;
+        state.draggingNode = null;
+        drawConnections();
+      },
+      true
+    );
+
+    function drawMinimap() {
+      const c = document.getElementById('minimap-canvas');
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#0a0a10';
+      ctx.fillRect(0, 0, 160, 100);
+      const sx = 160 / WORLD_W;
+      const sy = 100 / WORLD_H;
+      ctx.strokeStyle = 'rgba(139,92,246,0.5)';
+      for (const id of Object.keys(state.nodes)) {
+        const n = state.nodes[id];
+        ctx.fillStyle = 'rgba(139,92,246,0.35)';
+        ctx.fillRect(n.x * sx, n.y * sy, Math.max(8, n.el.offsetWidth * sx), Math.max(6, n.el.offsetHeight * sy));
+      }
+      const vr = viewport.getBoundingClientRect();
+      const vx = (-state.tx / state.scale) * sx;
+      const vy = (-state.ty / state.scale) * sy;
+      const vw = (vr.width / state.scale) * sx;
+      const vh = (vr.height / state.scale) * sy;
+      const mv = document.getElementById('minimap-view');
+      mv.style.left = Math.max(0, vx) + 'px';
+      mv.style.top = Math.max(0, vy) + 'px';
+      mv.style.width = Math.min(160, vw) + 'px';
+      mv.style.height = Math.min(100, vh) + 'px';
+    }
+
+    let panoRaf = null;
+    const gridStageRenders = new Set();
+
+    function schedulePanoTick() {
+      if (panoRaf) return;
+      panoRaf = requestAnimationFrame(function tick() {
+        panoRaf = null;
+        let any = false;
+        for (const id of Object.keys(state.nodes)) {
+          const p = state.nodes[id]?.panothree;
+          if (!p) continue;
+          any = true;
+          p.controls.update();
+          p.renderer.render(p.scene, p.camera);
+        }
+        if (gridStageRenders.size) {
+          any = true;
+          gridStageRenders.forEach((fn) => {
+            try {
+              fn();
+            } catch (e) {}
+          });
+        }
+        if (any) schedulePanoTick();
+      });
+    }
+
+    function disposeObject3DTree(root) {
+      if (!root) return;
+      root.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        const m = o.material;
+        if (m) {
+          if (Array.isArray(m)) m.forEach((x) => x.dispose());
+          else m.dispose();
+        }
+      });
+    }
+
+    function disposeGridStageThree(gridId) {
+      const n = state.nodes[gridId];
+      const gt = n?.gridThree;
+      if (!gt || gt._disposed) return;
+      gt._disposed = true;
+      if (gt._renderFn) gridStageRenders.delete(gt._renderFn);
+      try {
+        gt.controls?.dispose();
+        if (gt._ro) {
+          gt._ro.disconnect();
+          gt._ro = null;
+        }
+        disposeObject3DTree(gt.dummyRoot);
+        disposeObject3DTree(gt.floor);
+        if (gt.gridHelper) disposeObject3DTree(gt.gridHelper);
+        gt.renderer?.dispose();
+        if (gt.renderer?.domElement?.parentNode) gt.renderer.domElement.parentNode.removeChild(gt.renderer.domElement);
+        if (gt.labelRenderer?.domElement?.parentNode) {
+          gt.labelRenderer.domElement.parentNode.removeChild(gt.labelRenderer.domElement);
+        }
+      } catch (e) {}
+      n.gridThree = null;
+    }
+
+    function buildGridMannequin() {
+      const root = new THREE.Group();
+      const body = new THREE.MeshBasicMaterial({ color: 0x1e2d3d });
+      const accent = new THREE.MeshBasicMaterial({ color: 0x22d3ee });
+      accent.userData.isAccent = true;
+      body.userData.isBody = true;
+
+      const legG = new THREE.CylinderGeometry(0.055, 0.065, 0.7, 10);
+      const legL = new THREE.Mesh(legG, body);
+      legL.position.set(-0.1, 0.35, 0);
+      root.add(legL);
+      const legR = new THREE.Mesh(legG, body);
+      legR.position.set(0.1, 0.35, 0);
+      root.add(legR);
+
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.55, 12), body);
+      torso.position.y = 0.92;
+      root.add(torso);
+
+      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.14, 0.03), accent);
+      mark.position.set(0, 0.96, 0.12);
+      root.add(mark);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), body);
+      head.position.y = 1.34;
+      root.add(head);
+
+      const armG = new THREE.CylinderGeometry(0.038, 0.038, 0.46, 8);
+      const armL = new THREE.Mesh(armG, body);
+      armL.position.set(-0.22, 0.98, 0);
+      armL.rotation.z = 0.4;
+      root.add(armL);
+      const armR = new THREE.Mesh(armG, body);
+      armR.position.set(0.22, 0.98, 0);
+      armR.rotation.z = -0.4;
+      root.add(armR);
+
+      return root;
+    }
+
+    function applyGridOrbitCamera(gt, st) {
+      const tgtY = st.orbitTargetY;
+      gt.controls.target.set(0, tgtY, 0);
+      const d = st.orbitDist;
+      const el = st.orbitElev;
+      const th = st.orbitAzim;
+      const h = d * Math.cos(el);
+      gt.camera.position.set(h * Math.sin(th), tgtY + d * Math.sin(el), h * Math.cos(th));
+      gt.camera.up.set(0, 1, 0);
+      gt.camera.lookAt(gt.controls.target);
+      gt.controls.update();
+    }
+
+    function captureOrbitFromCamera(gt, st) {
+      const tgt = gt.controls.target;
+      const off = gt.camera.position.clone().sub(tgt);
+      const r = off.length();
+      if (r < 0.01) return;
+      st.orbitDist = r;
+      st.orbitElev = Math.asin(Math.max(-1, Math.min(1, off.y / r)));
+      st.orbitAzim = Math.atan2(off.x, off.z);
+    }
+
+    function pickGridDummyFigureIndex(gt, clientX, clientY) {
+      const rect = gt.container.getBoundingClientRect();
+      const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
+      gt.raycaster.setFromCamera({ x: ndcX, y: ndcY }, gt.camera);
+      const hits = gt.raycaster.intersectObjects(gt.dummyRoot.children, true);
+      for (let i = 0; i < hits.length; i++) {
+        let o = hits[i].object;
+        while (o && o.userData.figureIndex == null) o = o.parent;
+        if (o && o.userData.figureIndex != null) return o.userData.figureIndex;
+      }
+      return -1;
+    }
+
+    function syncGridYawSliderUI(n, yawDeg) {
+      const ys = n.el.querySelector('.js-yaw-slider');
+      const yv = n.el.querySelector('.js-yaw-val');
+      const v = Math.round(yawDeg || 0);
+      if (ys) ys.value = String(v);
+      if (yv) yv.textContent = v + '°';
+    }
+
+    function updateGridToolbarMode(n) {
+      const st = ensureGridStage(n);
+      const bd = n.el.querySelector('.js-grid-mode-dummy');
+      const bc = n.el.querySelector('.js-grid-mode-camera');
+      if (bd) bd.classList.toggle('grid-mode-on', st.viewMode === 'dummy');
+      if (bc) bc.classList.toggle('grid-mode-on', st.viewMode === 'camera');
+    }
+
+    function setGridViewMode(gridId, mode) {
+      const n = state.nodes[gridId];
+      if (!n?.gridThree) return;
+      const st = ensureGridStage(n);
+      st.viewMode = mode;
+      const gt = n.gridThree;
+      gt.controls.enabled = mode === 'camera';
+      gt.container.style.cursor = mode === 'camera' ? 'grab' : 'crosshair';
+      if (mode === 'camera') gt.controls.update();
+      updateGridToolbarMode(n);
+    }
+
+    function applyGridFloorMaterial(gt, st) {
+      if (gt?.floor?.material && st) gt.floor.material.opacity = st.floorOpacity;
+    }
+
+    function cycleGridFloorOpacity(gridId) {
+      const n = state.nodes[gridId];
+      const st = ensureGridStage(n);
+      const gt = n?.gridThree;
+      if (!gt) return;
+      const steps = [0.26, 0.4, 0.55, 0.7];
+      let i = steps.findIndex((x) => Math.abs(x - st.floorOpacity) < 0.02);
+      if (i < 0) i = 0;
+      st.floorOpacity = steps[(i + 1) % steps.length];
+      applyGridFloorMaterial(gt, st);
+    }
+
+    function gridStageOrbitZoom(gridId, factor) {
+      const n = state.nodes[gridId];
+      const st = ensureGridStage(n);
+      const gt = n?.gridThree;
+      if (!gt) return;
+      st.orbitDist = Math.max(2.4, Math.min(22, st.orbitDist * factor));
+      applyGridOrbitCamera(gt, st);
+    }
+
+    function applyGridFormationLayout(nodeId) {
+      const n = state.nodes[nodeId];
+      const st = ensureGridStage(n);
+      const el = n.el;
+      const cols = Math.max(1, Math.min(12, parseInt(el.querySelector('.js-grid-form-cols')?.value, 10) || st.formCols));
+      const rows = Math.max(1, Math.min(12, parseInt(el.querySelector('.js-grid-form-rows')?.value, 10) || st.formRows));
+      st.formCols = cols;
+      st.formRows = rows;
+      const nFig = st.figures.length;
+      if (!nFig) return;
+      const slots = cols * rows;
+      const count = Math.min(nFig, slots);
+      const marginX = 10;
+      const marginY = 10;
+      const spanX = 100 - 2 * marginX;
+      const spanY = 100 - 2 * marginY;
+      for (let i = 0; i < count; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const u = cols <= 1 ? 0.5 : col / (cols - 1);
+        const v = rows <= 1 ? 0.5 : row / (rows - 1);
+        st.figures[i].xPct = marginX + u * spanX;
+        st.figures[i].yPct = marginY + v * spanY;
+      }
+      syncGridStageThree(nodeId);
+    }
+
+    function shuffleGridFigurePositions(nodeId) {
+      const st = ensureGridStage(state.nodes[nodeId]);
+      if (!st.figures.length) return;
+      for (const f of st.figures) {
+        f.xPct = 14 + Math.random() * 72;
+        f.yPct = 14 + Math.random() * 72;
+      }
+      syncGridStageThree(nodeId);
+    }
+
+    function updateGridSnapshotPreview(nodeId, dataUrl) {
+      const n = state.nodes[nodeId];
+      if (!n) return;
+      n.lastSnapshotDataUrl = dataUrl;
+      const wrap = n.el?.querySelector('.js-grid-snap-preview-wrap');
+      if (!wrap || !dataUrl) return;
+      wrap.classList.remove('hidden');
+      let img = wrap.querySelector('.js-grid-snap-preview-img');
+      if (!img) {
+        img = document.createElement('img');
+        img.className = 'js-grid-snap-preview-img w-full max-h-24 object-contain rounded border border-amber-500/30 bg-black/40';
+        img.alt = '站位快照';
+        wrap.appendChild(img);
+      }
+      img.src = dataUrl;
+    }
+
+    function snapshotGridStage(nodeId) {
+      const n = state.nodes[nodeId];
+      const gt = n?.gridThree;
+      if (!gt) return;
+      renderGridStageFrame(nodeId);
+      try {
+        const url = gt.renderer.domElement.toDataURL('image/png');
+        updateGridSnapshotPreview(nodeId, url);
+        const tip = n.el.querySelector('.js-grid-snap-tip');
+        if (tip) {
+          tip.textContent = '已更新快照预览（未下载到本地）；资产生成时会自动截取当前站位画面并上传';
+          setTimeout(() => {
+            if (tip && n.el?.isConnected) tip.textContent = '';
+          }, 4200);
+        }
+      } catch (e) {}
+    }
+
+    function captureGridStageToDataUrl(gridNodeId) {
+      const gt = state.nodes[gridNodeId]?.gridThree;
+      if (!gt) return '';
+      renderGridStageFrame(gridNodeId);
+      try {
+        return gt.renderer.domElement.toDataURL('image/png', 0.92);
+      } catch {
+        return '';
+      }
+    }
+
+    function nudgeSelectedFigureYaw(nodeId, deltaDeg) {
+      const n = state.nodes[nodeId];
+      const st = ensureGridStage(n);
+      if (!st.figures.length) return;
+      const fi = st.selectedFigureIndex >= 0 ? st.selectedFigureIndex : 0;
+      const f = st.figures[fi];
+      f.yawDeg = ((f.yawDeg || 0) + deltaDeg + 360) % 360;
+      syncGridStageThree(nodeId);
+      syncGridYawSliderUI(n, f.yawDeg);
+    }
+
+    function resetGridStageCamera(nodeId) {
+      const gn = state.nodes[nodeId];
+      const st = ensureGridStage(gn);
+      st.orbitAzim = 0.55;
+      st.orbitElev = 0.32;
+      st.orbitDist = 8.4;
+      st.orbitTargetY = 0.42;
+      const gt = gn.gridThree;
+      if (gt) applyGridOrbitCamera(gt, st);
+      syncGridStageThree(nodeId);
+    }
+
+    function renderGridStageFrame(gridId) {
+      const n = state.nodes[gridId];
+      const gt = n?.gridThree;
+      if (!gt || gt._disposed || !gt.container?.isConnected) return;
+      const st = ensureGridStage(n);
+      if (st.viewMode === 'camera') gt.controls.update();
+      gt.renderer.render(gt.scene, gt.camera);
+      gt.labelRenderer.render(gt.scene, gt.camera);
+    }
+
+    function resizeGridStageThree(gridId) {
+      const gt = state.nodes[gridId]?.gridThree;
+      if (!gt?.container) return;
+      const w = Math.max(120, gt.container.clientWidth || 300);
+      const h = Math.max(100, gt.container.clientHeight || 160);
+      gt.camera.aspect = w / h;
+      gt.camera.updateProjectionMatrix();
+      gt.renderer.setSize(w, h);
+      gt.labelRenderer.setSize(w, h);
+    }
+
+    function syncGridStageThree(gridId) {
+      const n = state.nodes[gridId];
+      if (!n?.el || n.type !== 'grid') return;
+      if (!n.gridThree) initGridStageThree(gridId);
+      const gt = n.gridThree;
+      if (!gt) return;
+      const st = ensureGridStage(n);
+      while (gt.entries.length > st.figures.length) {
+        const e = gt.entries.pop();
+        if (e?.group) {
+          gt.dummyRoot.remove(e.group);
+          disposeObject3DTree(e.group);
+        }
+      }
+      while (gt.entries.length < st.figures.length) {
+        const idx = gt.entries.length;
+        const group = buildGridMannequin();
+        group.userData.figureIndex = idx;
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'grid-dummy-label';
+        const lbl = new CSS2DObject(labelDiv);
+        lbl.position.set(0, 1.68, 0);
+        group.add(lbl);
+        gt.dummyRoot.add(group);
+        gt.entries.push({ group, labelDiv });
+      }
+      st.figures.forEach((fig, idx) => {
+        const e = gt.entries[idx];
+        if (!e) return;
+        e.group.userData.figureIndex = idx;
+        e.group.visible = fig.hidden !== true;
+        e.group.position.set(pctToWorldX(fig.xPct), 0, pctToWorldZ(fig.yPct));
+        const sc = fig.scale != null ? fig.scale : 1;
+        e.group.scale.setScalar(sc);
+        e.group.rotation.y = THREE.MathUtils.degToRad(fig.yawDeg || 0);
+        e.labelDiv.textContent = String(idx + 1);
+        const sel = st.selectedFigureIndex === idx;
+        e.group.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          if (o.material.userData.isAccent) return;
+          if (!o.material.userData.isBody) return;
+          o.material.color.setHex(sel ? 0xe8eef2 : 0x1e2d3d);
+        });
+      });
+      applyGridFloorMaterial(gt, st);
+      const fc = n.el.querySelector('.js-grid-form-cols');
+      const fr = n.el.querySelector('.js-grid-form-rows');
+      if (fc && document.activeElement !== fc) fc.value = String(st.formCols);
+      if (fr && document.activeElement !== fr) fr.value = String(st.formRows);
+      const cnt = n.el.querySelector('.js-grid-fig-count');
+      if (cnt) cnt.textContent = st.figures.length + ' 个';
+      const fi = st.selectedFigureIndex >= 0 ? st.selectedFigureIndex : 0;
+      const ss = n.el.querySelector('.js-grid-scale-slider');
+      if (ss && st.figures[fi]) ss.value = String(st.figures[fi].scale != null ? st.figures[fi].scale : 1);
+      updateGridToolbarMode(n);
+    }
+
+    function initGridStageThree(gridId) {
+      const n = state.nodes[gridId];
+      if (!n || n.type !== 'grid' || n.gridThree) return;
+      const container = n.el.querySelector('.js-grid-stage-3d');
+      if (!container) return;
+      const st = ensureGridStage(n);
+      const w = Math.max(120, container.clientWidth || 300);
+      const h = Math.max(100, container.clientHeight || 160);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(42, w / h, 0.12, 80);
+      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setClearColor(0x000000, 0);
+      renderer.domElement.style.touchAction = 'none';
+      container.appendChild(renderer.domElement);
+
+      const labelRenderer = new CSS2DRenderer();
+      labelRenderer.setSize(w, h);
+      labelRenderer.domElement.style.position = 'absolute';
+      labelRenderer.domElement.style.inset = '0';
+      labelRenderer.domElement.style.pointerEvents = 'none';
+      container.appendChild(labelRenderer.domElement);
+
+      const floorGeo = new THREE.PlaneGeometry(GRID_STAGE_HALF_X * 2.4, GRID_STAGE_HALF_Z * 2.4);
+      const floorMat = new THREE.MeshBasicMaterial({
+        color: 0x050508,
+        transparent: true,
+        opacity: st.floorOpacity,
+        side: THREE.DoubleSide,
+      });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      scene.add(floor);
+
+      const gridHelper = new THREE.GridHelper(GRID_STAGE_HALF_X * 2.38, 18, 0x64748b, 0x1e293b);
+      gridHelper.position.y = 0.012;
+      scene.add(gridHelper);
+
+      const dummyRoot = new THREE.Group();
+      scene.add(dummyRoot);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.minDistance = 2.4;
+      controls.maxDistance = 22;
+      controls.minPolarAngle = 0.12;
+      controls.maxPolarAngle = Math.PI / 2 - 0.08;
+      controls.target.set(0, st.orbitTargetY, 0);
+      applyGridOrbitCamera({ camera, controls }, st);
+      controls.enabled = st.viewMode === 'camera';
+      controls.addEventListener('change', () => captureOrbitFromCamera({ camera, controls }, st));
+
+      const raycaster = new THREE.Raycaster();
+
+      const gt = {
+        _disposed: false,
+        gridId,
+        container,
+        scene,
+        camera,
+        renderer,
+        labelRenderer,
+        controls,
+        floor,
+        gridHelper,
+        dummyRoot,
+        entries: [],
+        raycaster,
+        _ro: null,
+      };
+      n.gridThree = gt;
+
+      gt._renderFn = () => renderGridStageFrame(gridId);
+      gridStageRenders.add(gt._renderFn);
+      schedulePanoTick();
+
+      gt._ro = new ResizeObserver(() => resizeGridStageThree(gridId));
+      gt._ro.observe(container);
+
+      renderer.domElement.addEventListener('pointerdown', (ev) => {
+        if (ev.button !== 0) return;
+        const st2 = ensureGridStage(n);
+        if (st2.viewMode === 'camera') return;
+        const idx = pickGridDummyFigureIndex(gt, ev.clientX, ev.clientY);
+        if (idx < 0) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        st2.selectedFigureIndex = idx;
+        const fig = st2.figures[idx];
+        syncGridYawSliderUI(n, fig.yawDeg);
+        syncGridStageThree(gridId);
+        const hit = groundHitFromClient(gridId, ev.clientX, ev.clientY);
+        if (ev.shiftKey) {
+          state.gridStageInteract = { gridId, kind: 'yaw', idx, startX: ev.clientX, startYaw: fig.yawDeg || 0 };
+        } else if (hit) {
+          state.gridStageInteract = { gridId, kind: 'move', idx, lastWorld: hit.clone() };
+        }
+      });
+
+      renderer.domElement.addEventListener(
+        'wheel',
+        (ev) => {
+          const st2 = ensureGridStage(n);
+          if (st2.viewMode === 'camera') return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (!st2.figures.length) return;
+          const fi = st2.selectedFigureIndex >= 0 ? st2.selectedFigureIndex : 0;
+          const f = st2.figures[fi];
+          f.yawDeg = ((f.yawDeg || 0) + (ev.deltaY > 0 ? -5 : 5) + 360) % 360;
+          syncGridStageThree(gridId);
+          if (st2.selectedFigureIndex === fi) syncGridYawSliderUI(n, f.yawDeg);
+        },
+        { passive: false }
+      );
+
+      syncGridStageThree(gridId);
+    }
+
+    function disposePanoThree(nodeId) {
+      const n = state.nodes[nodeId];
+      if (!n?.panothree) return;
+      const p = n.panothree;
+      try {
+        p.controls.dispose();
+        if (p.mesh?.geometry) p.mesh.geometry.dispose();
+        const m = p.mesh?.material;
+        if (m) {
+          if (m.map) m.map.dispose();
+          m.dispose();
+        }
+        p.renderer.dispose();
+        if (p.container && p.renderer.domElement.parentNode) {
+          p.renderer.domElement.parentNode.removeChild(p.renderer.domElement);
+        }
+        if (p.container) p.container.classList.remove('js-pano-active');
+      } catch (err) {}
+      n.panothree = null;
+    }
+
+    function initThreeForNode(nodeId, containerEl) {
+      disposePanoThree(nodeId);
+      const w = containerEl.clientWidth || 320;
+      const h = Math.max(140, containerEl.clientHeight || 200);
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(70, w / h, 0.1, 2000);
+      camera.position.set(0, 0, 0.1);
+      const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      containerEl.appendChild(renderer.domElement);
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableZoom = true;
+      controls.enableDamping = true;
+      controls.rotateSpeed = -0.35;
+      controls.minDistance = 0.02;
+      controls.maxDistance = 900;
+      controls.zoomSpeed = 1.15;
+      const geom = new THREE.SphereGeometry(500, 48, 32);
+      geom.scale(-1, 1, 1);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x222233 });
+      const mesh = new THREE.Mesh(geom, mat);
+      scene.add(mesh);
+      state.nodes[nodeId].panothree = { renderer, scene, camera, controls, mesh, container: containerEl };
+      containerEl.addEventListener('mousedown', (ev) => {
+        if (ev.button !== 0) return;
+        document.querySelectorAll('.js-three-host').forEach((h) => h.classList.remove('js-pano-active'));
+        containerEl.classList.add('js-pano-active');
+        state.activePanoNodeId = nodeId;
+      });
+      schedulePanoTick();
+    }
+
+    window.addEventListener('resize', () => {
+      for (const id of Object.keys(state.nodes)) {
+        if (state.nodes[id]?.type === 'pano') resizePanoRendererToContainer(id);
+        if (state.nodes[id]?.type === 'grid') resizeGridStageThree(id);
+      }
+    });
+
+    function loadPanoTextureForNode(nodeId, url) {
+      const pn0 = state.nodes[nodeId];
+      if (pn0 && pn0.type === 'pano') {
+        delete pn0.directorSceneFlatUrl;
+        if (!pn0.lastCaptureDataUrl) syncPanoSceneWrapVisibility(nodeId);
+      }
+      const p = state.nodes[nodeId]?.panothree;
+      if (!p) return;
+      new THREE.TextureLoader().load(url, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        if (p.mesh.material.map) p.mesh.material.map.dispose();
+        p.mesh.material.map = tex;
+        p.mesh.material.needsUpdate = true;
+        p.mesh.material.color.setHex(0xffffff);
+      });
+    }
+
+    function syncPanoSceneWrapVisibility(nodeId) {
+      const pn = state.nodes[nodeId];
+      const wrap = pn?.el?.querySelector('.js-pano-scene-wrap');
+      if (!wrap || pn?.type !== 'pano') return;
+      const src = (pn.lastCaptureDataUrl || pn.directorSceneFlatUrl || '').trim();
+      if (!src) {
+        wrap.classList.add('hidden');
+        const im = wrap.querySelector('.js-pano-scene-img');
+        if (im) im.removeAttribute('src');
+        return;
+      }
+      wrap.classList.remove('hidden');
+      let img = wrap.querySelector('.js-pano-scene-img');
+      if (!img) {
+        img = document.createElement('img');
+        img.className = 'js-pano-scene-img w-full max-h-36 object-contain rounded-lg border border-cyan-500/35 mt-1';
+        img.alt = '场景图';
+        img.referrerPolicy = 'no-referrer';
+        wrap.appendChild(img);
+      }
+      img.src = src;
+    }
+
+    function setPanoSceneWrapCaption(nodeId, text) {
+      const cap = state.nodes[nodeId]?.el?.querySelector('.js-pano-scene-caption');
+      if (cap) cap.textContent = text || '';
+    }
+
+    /** 编导带入：无 360 时把平面场景图写入全景节点下方「场景图」区域（不当作等距柱状全景贴球） */
+    function showPanoDirectorFlatScene(nodeId, url, caption) {
+      const pn = state.nodes[nodeId];
+      if (!pn || pn.type !== 'pano' || !url) return;
+      pn.directorSceneFlatUrl = String(url).trim();
+      syncPanoSceneWrapVisibility(nodeId);
+      setPanoSceneWrapCaption(nodeId, caption);
+    }
+
+    function updatePanoScenePreview(nodeId) {
+      const pn = state.nodes[nodeId];
+      if (!pn?.lastCaptureDataUrl) return;
+      syncPanoSceneWrapVisibility(nodeId);
+      setPanoSceneWrapCaption(
+        nodeId,
+        '已生成「场景图」（当前视角）。请将本节点连到「资产生成」，生成图片时会随提示词提交场景/站位/角色参考。'
+      );
+    }
+
+    function capturePanoForNode(nodeId) {
+      const p = state.nodes[nodeId]?.panothree;
+      if (!p) return;
+      p.renderer.render(p.scene, p.camera);
+      const dataUrl = p.renderer.domElement.toDataURL('image/png');
+      state.sceneShot = dataUrl;
+      const pn = state.nodes[nodeId];
+      if (pn) {
+        pn.lastCaptureDataUrl = dataUrl;
+        delete pn.directorSceneFlatUrl;
+      }
+      refreshAllGrids();
+      updatePanoScenePreview(nodeId);
+    }
+
+    function previewCharForNode(nodeId, file) {
+      if (!file) return;
+      const n = state.nodes[nodeId];
+      if (!n) return;
+      const url = URL.createObjectURL(file);
+      n.charUrl = url;
+      const list = Object.keys(state.nodes)
+        .map((k) => state.nodes[k])
+        .filter((x) => x.type === 'char' && x.charUrl);
+      state.charA = list[0]?.charUrl || null;
+      state.charB = list[1]?.charUrl || null;
+      const box = n.el.querySelector('.js-char-preview');
+      if (box) {
+        box.innerHTML = '<img src="' + url + '" class="w-full h-full object-contain rounded-lg" alt="char">';
+      }
+      refreshAllGrids();
+    }
+
+    /** 将超级编导主体参考（站内 URL）挂到角色三视图节点，供资产生成上传参考 */
+    function setCharNodeRemoteUrl(nodeId, href) {
+      const n = state.nodes[nodeId];
+      if (!n || n.type !== 'char' || !href) return;
+      if (n.charUrl && String(n.charUrl).startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(n.charUrl);
+        } catch (_) {}
+      }
+      const safe = String(href).trim();
+      n.charUrl = safe;
+      const list = Object.keys(state.nodes)
+        .map((k) => state.nodes[k])
+        .filter((x) => x.type === 'char' && x.charUrl)
+        .sort((a, b) => (a.y || 0) - (b.y || 0));
+      state.charA = list[0]?.charUrl || null;
+      state.charB = list[1]?.charUrl || null;
+      const box = n.el.querySelector('.js-char-preview');
+      if (box) {
+        const im = document.createElement('img');
+        im.className = 'w-full h-full object-contain rounded-lg';
+        im.alt = 'char';
+        im.referrerPolicy = 'no-referrer';
+        im.src = safe;
+        box.replaceChildren(im);
+      }
+      refreshAllGrids();
+    }
+
+    function previewPropForNode(nodeId, file) {
+      if (!file) return;
+      const n = state.nodes[nodeId];
+      if (!n || n.type !== 'prop') return;
+      const url = URL.createObjectURL(file);
+      n.propUrl = url;
+      const box = n.el.querySelector('.js-prop-preview');
+      if (box) {
+        box.innerHTML = '<img src="' + url + '" class="w-full h-full object-contain rounded-lg" alt="prop"/>';
+      }
+    }
+
+    /** 超级编导主体参考中的道具库图 → 道具参考节点 */
+    function setPropNodeRemoteUrl(nodeId, href) {
+      const n = state.nodes[nodeId];
+      if (!n || n.type !== 'prop' || !href) return;
+      if (n.propUrl && String(n.propUrl).startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(n.propUrl);
+        } catch (_) {}
+      }
+      const safe = String(href).trim();
+      n.propUrl = safe;
+      const box = n.el.querySelector('.js-prop-preview');
+      if (box) {
+        const im = document.createElement('img');
+        im.className = 'w-full h-full object-contain rounded-lg';
+        im.alt = 'prop';
+        im.referrerPolicy = 'no-referrer';
+        im.src = safe;
+        box.replaceChildren(im);
+      }
+    }
+
+    function previewSceneForNode(nodeId, file) {
+      if (!file) return;
+      const n = state.nodes[nodeId];
+      if (!n || n.type !== 'scene') return;
+      const url = URL.createObjectURL(file);
+      n.sceneUrl = url;
+      const box = n.el.querySelector('.js-scene-preview');
+      if (box) {
+        box.innerHTML = '<img src="' + url + '" class="w-full h-full object-contain rounded-lg" alt="scene"/>';
+      }
+      refreshAllGrids();
+    }
+
+    /** 超级编导「场景」库图或本地上传 → 图片场景节点；连线资产生成与站位底图 */
+    function setSceneNodeRemoteUrl(nodeId, href) {
+      const n = state.nodes[nodeId];
+      if (!n || n.type !== 'scene' || !href) return;
+      if (n.sceneUrl && String(n.sceneUrl).startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(n.sceneUrl);
+        } catch (_) {}
+      }
+      const safe = String(href).trim();
+      n.sceneUrl = safe;
+      const box = n.el.querySelector('.js-scene-preview');
+      if (box) {
+        const im = document.createElement('img');
+        im.className = 'w-full h-full object-contain rounded-lg';
+        im.alt = 'scene';
+        im.referrerPolicy = 'no-referrer';
+        im.src = safe;
+        box.replaceChildren(im);
+      }
+      refreshAllGrids();
+    }
+
+    function collectGenContext(genNodeId) {
+      const gnode = state.nodes[genNodeId];
+      const gel = gnode?.el;
+      let style = '写实电影';
+      let aspect = '16:9';
+      if (gel) {
+        const asp = gel.querySelector('.js-gen-aspect');
+        const st = gel.querySelector('.js-sel-style');
+        if (asp) aspect = asp.value;
+        if (st) style = st.value;
+      }
+      const incomers = state.links
+        .filter((l) => l.to === genNodeId)
+        .map((l) => state.nodes[l.from])
+        .filter(Boolean);
+      const gridSlot = 13;
+      let charYaw = 0;
+      let hasSceneShot = false;
+      let hasChar1 = false;
+      let hasChar2 = false;
+      let hasProp = false;
+      for (const n of incomers) {
+        if (n.type === 'grid') {
+          const st = n.stage;
+          if (st?.figures?.length) {
+            const fi = st.selectedFigureIndex >= 0 ? st.selectedFigureIndex : 0;
+            charYaw = st.figures[fi].yawDeg;
+          } else {
+            const ys = n.el.querySelector('.js-yaw-slider');
+            if (ys) charYaw = parseInt(ys.value, 10);
+          }
+        }
+      }
+      const charIdSet = new Set();
+      incomers.forEach((x) => {
+        if (x.type === 'char' && x.charUrl) charIdSet.add(x.id);
+        if (x.type === 'grid') {
+          state.links
+            .filter((l) => l.to === x.id)
+            .forEach((l) => {
+              const s = state.nodes[l.from];
+              if (s?.type === 'char' && s.charUrl) charIdSet.add(s.id);
+            });
+        }
+      });
+      hasChar1 = charIdSet.size >= 1;
+      hasChar2 = charIdSet.size >= 2;
+      incomers.forEach((x) => {
+        if (x.type === 'prop' && x.propUrl) hasProp = true;
+      });
+      function incomerHasSceneVisual(x) {
+        if (!x) return false;
+        if (x.type === 'pano' && x.lastCaptureDataUrl) return true;
+        if (x.type === 'pano' && x.directorSceneFlatUrl) return true;
+        if (x.type === 'scene' && x.sceneUrl) return true;
+        return false;
+      }
+      for (const n of incomers) {
+        if (incomerHasSceneVisual(n)) {
+          hasSceneShot = true;
+          break;
+        }
+        if (n.type === 'grid') {
+          const pins = state.links
+            .filter((l) => l.to === n.id)
+            .map((l) => state.nodes[l.from])
+            .filter(Boolean);
+          if (pins.some(incomerHasSceneVisual)) {
+            hasSceneShot = true;
+            break;
+          }
+        }
+      }
+      state.gridSlot = gridSlot;
+      state.charYaw = charYaw;
+      return { style, aspect, gridSlot, charYaw, hasSceneShot, hasChar1, hasChar2, hasProp };
+    }
+
+    const XUNYU_USER_ASSETS_KEY = 'xunyu_user_generated_assets';
+    const XUNYU_USER_ASSETS_MAX = 100;
+
+    function recordUserGeneratedAssetForCenter(url, kind) {
+      let u = normalizeGenImageUrl(url);
+      if (!u) return;
+      if (u.startsWith('blob:')) return;
+      try {
+        if (u.startsWith('/')) u = absoluteSiteUrl(u);
+      } catch (_) {
+        return;
+      }
+      if (!u || u.startsWith('blob:')) return;
+      try {
+        let arr = [];
+        const raw = localStorage.getItem(XUNYU_USER_ASSETS_KEY);
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (Array.isArray(p)) arr = p;
+        }
+        arr = arr.filter((x) => x && x.url !== u);
+        arr.unshift({ url: u, kind: kind || 'image', ts: Date.now(), source: 'canvas' });
+        if (arr.length > XUNYU_USER_ASSETS_MAX) arr = arr.slice(0, XUNYU_USER_ASSETS_MAX);
+        localStorage.setItem(XUNYU_USER_ASSETS_KEY, JSON.stringify(arr));
+      } catch (_) {}
+    }
+
+    function absoluteSiteUrl(pathOrFull) {
+      if (!pathOrFull) return '';
+      const s = String(pathOrFull).trim();
+      if (s.startsWith('http://') || s.startsWith('https://')) return s;
+      if (s.startsWith('//') && !s.startsWith('///')) {
+        try {
+          return new URL('https:' + s).href;
+        } catch {
+          return '';
+        }
+      }
+      try {
+        return new URL(s, window.location.origin).href;
+      } catch {
+        return s;
+      }
+    }
+
+    /** 反代返回 HTML 错误页时 r.json() 会失败；502/504 多为网关超时 */
+    function formatGenerateImageParseFailMsg(r) {
+      const st = r && r.status;
+      let s = '服务器返回了非 JSON 内容（HTTP ' + st + '）';
+      if (st === 504 || st === 502) {
+        s +=
+          '。多为网关超时：4K+多分镜耗时长，可先试 2K/1K 或减少宫格；服务端请在 Nginx 等为反代增加 proxy_read_timeout（建议 ≥300s，与上游耗时一致）。';
+      }
+      return s;
+    }
+
+    /** 长寿出图：POST 立即返回 job_id，轮询短请求，避免反代切断长寿 POST 而服务端仍成功 */
+    async function pollImageGenerateJob(jobId, onTick) {
+      const deadline = Date.now() + 16 * 60 * 1000;
+      const interval = 2000;
+      for (;;) {
+        if (Date.now() > deadline) break;
+        if (typeof onTick === 'function') onTick();
+        const sr = await fetch(
+          '/api/generate/image/status?job_id=' + encodeURIComponent(jobId),
+          { credentials: 'include' }
+        );
+        let sj = null;
+        try {
+          sj = await sr.json();
+        } catch (_) {
+          await new Promise((res) => setTimeout(res, interval));
+          continue;
+        }
+        if (sr.status === 401 || sj.code === 401) {
+          throw new Error('需要登录');
+        }
+        if (sj.code === 404) {
+          throw new Error(sj.msg || '任务不存在或已过期');
+        }
+        if (sj.code !== 200 || !sj.data) {
+          await new Promise((res) => setTimeout(res, interval));
+          continue;
+        }
+        const d = sj.data;
+        if (d.status === 'done') return d;
+        if (d.status === 'failed') throw new Error(d.msg || '生成失败');
+        await new Promise((res) => setTimeout(res, interval));
+      }
+      throw new Error('等待结果超时，请稍后重试');
+    }
+
+    async function postGenerateImageCanvas(genBody, statusTextSetter) {
+      showGlobalGenWait('正在生成画面…');
+      try {
+        const r = await fetch('/api/generate/image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ...genBody, async: true }),
+        });
+        let j = null;
+        try {
+          j = await r.json();
+        } catch (_) {
+          j = { code: r.ok ? 200 : 0, msg: formatGenerateImageParseFailMsg(r) };
+        }
+        if (r.status === 401 || j.code === 401) {
+          return { unauthorized: true, r, j };
+        }
+        if (j.code !== 200 || !j.data || !j.data.job_id) {
+          return { error: true, r, j };
+        }
+        const final = await pollImageGenerateJob(j.data.job_id, statusTextSetter);
+        return { done: true, data: final };
+      } finally {
+        hideGlobalGenWait();
+      }
+    }
+
+    /** 统一解析接口返回的 image_url（字符串 / 嵌套对象 / 协议相对等） */
+    function normalizeGenImageUrl(raw) {
+      if (raw == null) return '';
+      if (typeof raw === 'object') {
+        if (raw.url) return normalizeGenImageUrl(raw.url);
+        if (raw.href) return normalizeGenImageUrl(raw.href);
+        if (raw.image_url) return normalizeGenImageUrl(raw.image_url);
+        return '';
+      }
+      let s = String(raw).trim();
+      if (!s || s === 'undefined' || s === 'null') return '';
+      if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+        s = s.slice(1, -1).trim();
+      }
+      return s;
+    }
+
+    function openGenImageInNewWindow(rawUrl) {
+      const u = normalizeGenImageUrl(rawUrl);
+      if (!u) return;
+      if (u.startsWith('blob:')) {
+        window.open(u, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (u.startsWith('data:image/')) {
+        const esc = u.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const w = window.open('', '_blank', 'noopener,noreferrer');
+        if (!w) return;
+        w.document.open();
+        w.document.write(
+          '<!DOCTYPE html><html><head><meta charset="utf-8"><title>生成图</title></head><body style="margin:0;background:#0b0b12;display:flex;align-items:center;justify-content:center;min-height:100vh">' +
+            '<img alt="生成图" src="' +
+            esc +
+            '" style="max-width:100%;max-height:100vh;object-fit:contain"/></body></html>'
+        );
+        w.document.close();
+        return;
+      }
+      const href =
+        u.startsWith('http://') || u.startsWith('https://')
+          ? u
+          : u.startsWith('//')
+            ? absoluteSiteUrl('https:' + u)
+            : absoluteSiteUrl(u);
+      if (!href) return;
+      window.open(href, '_blank', 'noopener,noreferrer');
+    }
+
+    async function uploadImageBlobForCanvas(blob, filename) {
+      const fd = new FormData();
+      fd.append('files', blob, filename || 'ref.png');
+      const r = await fetch('/api/upload/image', { method: 'POST', body: fd, credentials: 'include' });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401 || j.code === 401) throw new Error('请先登录后再上传参考图');
+      if (j.code !== 200 || !j.data?.urls?.length) throw new Error(j.msg || '参考图上传失败');
+      return j.data.urls[0];
+    }
+
+    async function resolveImageRefForGen(raw, filename) {
+      if (!raw) return null;
+      if (raw.startsWith('/uploads/')) return raw;
+      if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+      if (raw.startsWith('data:image/')) {
+        const blob = await (await fetch(raw)).blob();
+        return uploadImageBlobForCanvas(blob, filename);
+      }
+      if (raw.startsWith('blob:')) {
+        const blob = await (await fetch(raw)).blob();
+        return uploadImageBlobForCanvas(blob, filename);
+      }
+      return null;
+    }
+
+    async function buildReferenceBlockForGen(genNodeId) {
+      const lines = [];
+      const reference_urls = [];
+      const incomers = state.links
+        .filter((l) => l.to === genNodeId)
+        .map((l) => state.nodes[l.from])
+        .filter(Boolean);
+      let sceneData = '';
+      let sceneDataLabel = '';
+      for (const n of incomers) {
+        if (n.type === 'pano' && n.lastCaptureDataUrl) {
+          sceneData = n.lastCaptureDataUrl;
+          sceneDataLabel = '360全景·当前截取视角';
+          break;
+        }
+      }
+      if (!sceneData) {
+        for (const n of incomers) {
+          if (n.type === 'pano' && n.directorSceneFlatUrl) {
+            sceneData = n.directorSceneFlatUrl;
+            sceneDataLabel = '平面场景参考（编导带入）';
+            break;
+          }
+        }
+      }
+      if (!sceneData) {
+        for (const n of incomers) {
+          if (n.type !== 'grid') continue;
+          const pins = state.links.filter((l) => l.to === n.id).map((l) => state.nodes[l.from]).filter(Boolean);
+          for (const p of pins) {
+            if (p.type === 'pano' && p.lastCaptureDataUrl) {
+              sceneData = p.lastCaptureDataUrl;
+              sceneDataLabel = '360全景·当前截取视角';
+              break;
+            }
+          }
+          if (sceneData) break;
+          for (const p of pins) {
+            if (p.type === 'pano' && p.directorSceneFlatUrl) {
+              sceneData = p.directorSceneFlatUrl;
+              sceneDataLabel = '平面场景参考（编导带入）';
+              break;
+            }
+          }
+          if (sceneData) break;
+        }
+      }
+      const gridNode = incomers.find((x) => x.type === 'grid');
+      const gridData = gridNode ? captureGridStageToDataUrl(gridNode.id) : '';
+      const seen = new Set();
+      const charNodes = [];
+      for (const n of incomers) {
+        if (n.type === 'char' && n.charUrl && !seen.has(n.id)) {
+          seen.add(n.id);
+          charNodes.push(n);
+        }
+      }
+      if (gridNode) {
+        charIdsLinkedToGridInOrder(gridNode.id).forEach((cid) => {
+          const c = state.nodes[cid];
+          if (c?.charUrl && !seen.has(c.id)) {
+            seen.add(c.id);
+            charNodes.push(c);
+          }
+        });
+      }
+      const propSeen = new Set();
+      const propNodes = [];
+      for (const n of incomers) {
+        if (n.type !== 'prop' || !n.propUrl || propSeen.has(n.id)) continue;
+        propSeen.add(n.id);
+        propNodes.push(n);
+      }
+      propNodes.sort((a, b) => (a.y || 0) - (b.y || 0));
+      const sceneNodes = [];
+      const sceneSeen = new Set();
+      function pushSceneNodesFrom(list) {
+        for (const n of list) {
+          if (!n || n.type !== 'scene' || !n.sceneUrl || sceneSeen.has(n.id)) continue;
+          sceneSeen.add(n.id);
+          sceneNodes.push(n);
+        }
+      }
+      pushSceneNodesFrom(incomers);
+      if (gridNode) {
+        const gp = state.links.filter((l) => l.to === gridNode.id).map((l) => state.nodes[l.from]).filter(Boolean);
+        pushSceneNodesFrom(gp);
+      }
+      sceneNodes.sort((a, b) => (a.y || 0) - (b.y || 0));
+      try {
+        if (sceneData) {
+          const path = await resolveImageRefForGen(sceneData, 'scene-pano.png');
+          if (path) {
+            const abs = absoluteSiteUrl(path);
+            lines.push('场景图（' + (sceneDataLabel || '参考') + '）: ' + abs);
+            reference_urls.push(abs);
+          } else {
+            lines.push('场景图: 参考图处理失败（请检查是否已登录）。');
+          }
+        }
+        for (let si = 0; si < sceneNodes.length; si++) {
+          const sn = sceneNodes[si];
+          try {
+            const path = await resolveImageRefForGen(sn.sceneUrl, 'scene-flat-' + (si + 1) + '.png');
+            if (path) {
+              const abs = absoluteSiteUrl(path);
+              lines.push('图片场景参考图' + (si + 1) + '（平面场景节点）: ' + abs);
+              reference_urls.push(abs);
+            } else {
+              lines.push('图片场景参考图' + (si + 1) + ': 上传失败。');
+            }
+          } catch (e) {
+            lines.push('图片场景参考图' + (si + 1) + ': ' + (e.message || String(e)));
+          }
+        }
+        if (gridData) {
+          const path = await resolveImageRefForGen(gridData, 'grid-stage.png');
+          if (path) {
+            const abs = absoluteSiteUrl(path);
+            lines.push('站位参考图（假人位置与编号顶标、与当前相机视角一致）: ' + abs);
+            reference_urls.push(abs);
+          } else {
+            lines.push('站位图: 已渲染但上传失败。');
+          }
+        }
+        for (let i = 0; i < charNodes.length; i++) {
+          const c = charNodes[i];
+          try {
+            const path = await resolveImageRefForGen(c.charUrl, 'character-' + (i + 1) + '.png');
+            if (path) {
+              const abs = absoluteSiteUrl(path);
+              lines.push('角色参考图' + (i + 1) + '（三视图节点）: ' + abs);
+              reference_urls.push(abs);
+            } else {
+              lines.push('角色参考图' + (i + 1) + ': 上传失败。');
+            }
+          } catch (e) {
+            lines.push('角色参考图' + (i + 1) + ': ' + (e.message || String(e)));
+          }
+        }
+        for (let i = 0; i < propNodes.length; i++) {
+          const c = propNodes[i];
+          try {
+            const path = await resolveImageRefForGen(c.propUrl, 'prop-' + (i + 1) + '.png');
+            if (path) {
+              const abs = absoluteSiteUrl(path);
+              lines.push('道具参考图' + (i + 1) + '（道具节点）: ' + abs);
+              reference_urls.push(abs);
+            } else {
+              lines.push('道具参考图' + (i + 1) + ': 上传失败。');
+            }
+          } catch (e) {
+            lines.push('道具参考图' + (i + 1) + ': ' + (e.message || String(e)));
+          }
+        }
+      } catch (e) {
+        lines.push('参考图处理异常: ' + (e.message || String(e)));
+      }
+      const textBlock = lines.length
+        ? '【画布参考图-已上传至本站，生图时请结合以下 URL 理解场景、站位、角色与道具】\n' + lines.join('\n')
+        : '';
+      return {
+        textBlock,
+        reference_urls,
+        reference_url: reference_urls.length ? reference_urls[0] : null,
+      };
+    }
+
+    function canvasSafeImageUrl(url) {
+      const u = normalizeGenImageUrl(url);
+      if (!u) return '';
+      if (u.startsWith('data:image/')) return u;
+      if (u.startsWith('//') && !u.startsWith('///')) {
+        try {
+          return new URL('https:' + u).href;
+        } catch (_) {
+          return '';
+        }
+      }
+      if (u.startsWith('/') && !u.startsWith('//')) {
+        try {
+          return new URL(u, window.location.origin).href;
+        } catch (_) {
+          return '';
+        }
+      }
+      try {
+        const o = new URL(u);
+        if (o.protocol === 'https:' || o.protocol === 'http:') return o.href;
+      } catch (_) {}
+      return '';
+    }
+
+    /** Nano Banana / 后端仅支持部分比例；21:9 按 16:9 请求并在文案中说明 */
+    function mapCanvasAspectForApi(canvasAspect) {
+      const a = String(canvasAspect || '16:9').trim();
+      if (a === '21:9') return { aspect_ratio: '16:9', hint: '（目标画幅为 21:9 电影宽银幕）' };
+      return { aspect_ratio: a, hint: '' };
+    }
+
+    function normalizeGenGridCells(raw) {
+      const n = parseInt(String(raw == null ? 3 : raw), 10);
+      return [1, 2, 3, 4, 6, 9].includes(n) ? n : 3;
+    }
+
+    function genGridLabel(n) {
+      return { 1: '单图', 2: '两宫格', 3: '三宫格(1×3)', 4: '四宫格', 6: '六宫格', 9: '九宫格' }[n] || '三宫格(1×3)';
+    }
+
+    /** 写入提示词，约束单张输出内的宫格分镜（依赖模型遵循） */
+    function buildGenGridInstruction(gridCells) {
+      const k = normalizeGenGridCells(gridCells);
+      if (k === 1) return '';
+      if (k === 2) {
+        return (
+          '【宫格输出要求】整张图为「左右两宫格」：画面从正中竖向分割为两等宽区域，左宫与右宫各为一格，两格内容可叙事连贯；分割线可极细或光影过渡，但必须明显分为左右两单元。不要做成上下两格。'
+        );
+      }
+      if (k === 3) {
+        return (
+          '【宫格输出要求】整张图为「1 行 × 3 列三宫格」：三个等宽矩形宫格横向一字排开（左、中、右），阅读顺序从左到右；分割线可极细或光影过渡，但必须明显分为三个横排单元。不要做成上下多行、不要做成 2×2 四宫格。'
+        );
+      }
+      if (k === 4) {
+        return (
+          '【宫格输出要求】整张图为「2×2 四宫格」：四个等大面积矩形宫格，按上行左、上行右、下行左、下行右排列，整体风格与光照统一。'
+        );
+      }
+      if (k === 6) {
+        return (
+          '【宫格输出要求】整张图为「2 行 × 3 列六宫格」：六个等面积矩形宫格，阅读顺序从左到右、从上到下（共两排）。'
+        );
+      }
+      if (k === 9) {
+        return (
+          '【宫格输出要求】整张图为「3×3 九宫格」：九个等面积宫格，阅读顺序从左到右、从上到下共三排。'
+        );
+      }
+      return '';
+    }
+
+    function wireGlobalFileInputs() {
+      document.getElementById('input-pano').addEventListener('change', (e) => {
+        const id = state.fileTargetPanoNodeId;
+        state.fileTargetPanoNodeId = null;
+        const f = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!f || !id) return;
+        loadPanoTextureForNode(id, URL.createObjectURL(f));
+      });
+      document.getElementById('input-char').addEventListener('change', (e) => {
+        const id = state.fileTargetCharNodeId;
+        state.fileTargetCharNodeId = null;
+        const f = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!f || !id) return;
+        previewCharForNode(id, f);
+      });
+      document.getElementById('input-prop').addEventListener('change', (e) => {
+        const id = state.fileTargetPropNodeId;
+        state.fileTargetPropNodeId = null;
+        const f = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!f || !id) return;
+        previewPropForNode(id, f);
+      });
+      document.getElementById('input-scene').addEventListener('change', (e) => {
+        const id = state.fileTargetSceneNodeId;
+        state.fileTargetSceneNodeId = null;
+        const f = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!f || !id) return;
+        previewSceneForNode(id, f);
+      });
+    }
+
+    function wireNode(el, nodeId, type) {
+      if (type === 'pano') {
+        el.querySelector('.js-pano-up').addEventListener('click', () => {
+          state.fileTargetPanoNodeId = nodeId;
+          document.getElementById('input-pano').click();
+        });
+        el.querySelector('.js-pano-cap').addEventListener('click', () => capturePanoForNode(nodeId));
+      }
+      if (type === 'char') {
+        el.querySelector('.js-char-pick').addEventListener('click', () => {
+          state.fileTargetCharNodeId = nodeId;
+          document.getElementById('input-char').click();
+        });
+      }
+      if (type === 'prop') {
+        el.querySelector('.js-prop-pick').addEventListener('click', () => {
+          state.fileTargetPropNodeId = nodeId;
+          document.getElementById('input-prop').click();
+        });
+      }
+      if (type === 'scene') {
+        el.querySelector('.js-scene-pick').addEventListener('click', () => {
+          state.fileTargetSceneNodeId = nodeId;
+          document.getElementById('input-scene').click();
+        });
+      }
+      if (type === 'grid') {
+        const gn = state.nodes[nodeId];
+        el.querySelector('.js-grid-mode-dummy')?.addEventListener('click', () => setGridViewMode(nodeId, 'dummy'));
+        el.querySelector('.js-grid-mode-camera')?.addEventListener('click', () => setGridViewMode(nodeId, 'camera'));
+        el.querySelector('.js-grid-hud-zoom-in')?.addEventListener('click', () => gridStageOrbitZoom(nodeId, 0.88));
+        el.querySelector('.js-grid-hud-zoom-out')?.addEventListener('click', () => gridStageOrbitZoom(nodeId, 1 / 0.88));
+        el.querySelector('.js-grid-hud-reset-view')?.addEventListener('click', () => resetGridStageCamera(nodeId));
+        el.querySelector('.js-grid-hud-floor')?.addEventListener('click', () => cycleGridFloorOpacity(nodeId));
+        el.querySelector('.js-grid-rot-ccw')?.addEventListener('click', () => nudgeSelectedFigureYaw(nodeId, -15));
+        el.querySelector('.js-grid-rot-cw')?.addEventListener('click', () => nudgeSelectedFigureYaw(nodeId, 15));
+        el.querySelector('.js-grid-form-apply')?.addEventListener('click', () => applyGridFormationLayout(nodeId));
+        el.querySelector('.js-grid-shuffle')?.addEventListener('click', () => shuffleGridFigurePositions(nodeId));
+        el.querySelector('.js-grid-snapshot')?.addEventListener('click', () => snapshotGridStage(nodeId));
+        el.querySelector('.js-grid-toggle-hide')?.addEventListener('click', () => {
+          const st = ensureGridStage(gn);
+          if (!st.figures.length) return;
+          const fi = st.selectedFigureIndex >= 0 ? st.selectedFigureIndex : 0;
+          st.figures[fi].hidden = !st.figures[fi].hidden;
+          syncGridStageThree(nodeId);
+        });
+        el.querySelector('.js-grid-add-fig')?.addEventListener('click', () => {
+          const st = ensureGridStage(gn);
+          const j = st.figures.length;
+          st.figures.push({
+            charNodeId: null,
+            xPct: 28 + (j % 4) * 12,
+            yPct: 32 + Math.floor(j / 4) * 12,
+            yawDeg: 0,
+            scale: 1,
+            hidden: false,
+          });
+          st.selectedFigureIndex = st.figures.length - 1;
+          syncGridStageThree(nodeId);
+          const fig = st.figures[st.selectedFigureIndex];
+          syncGridYawSliderUI(gn, fig.yawDeg);
+        });
+        el.querySelector('.js-grid-del-fig')?.addEventListener('click', () => {
+          const st = ensureGridStage(gn);
+          if (!st.figures.length) return;
+          const i = st.selectedFigureIndex >= 0 ? st.selectedFigureIndex : st.figures.length - 1;
+          st.figures.splice(i, 1);
+          st.selectedFigureIndex = st.figures.length ? Math.min(i, st.figures.length - 1) : -1;
+          syncGridStageThree(nodeId);
+          if (st.figures.length) {
+            const fig = st.figures[st.selectedFigureIndex];
+            syncGridYawSliderUI(gn, fig.yawDeg);
+          } else {
+            syncGridYawSliderUI(gn, 0);
+          }
+        });
+        el.querySelector('.js-grid-scale-slider')?.addEventListener('input', (ev) => {
+          const st = ensureGridStage(gn);
+          if (!st.figures.length) return;
+          const fi = st.selectedFigureIndex >= 0 ? st.selectedFigureIndex : 0;
+          const v = parseFloat(ev.target.value);
+          st.figures[fi].scale = v;
+          syncGridStageThree(nodeId);
+        });
+        el.querySelector('.js-grid-cam-reset')?.addEventListener('click', () => resetGridStageCamera(nodeId));
+        const ys = el.querySelector('.js-yaw-slider');
+        const yv = el.querySelector('.js-yaw-val');
+        ys.addEventListener('input', () => {
+          const v = parseInt(ys.value, 10);
+          state.charYaw = v;
+          yv.textContent = v + '°';
+          const st = ensureGridStage(gn);
+          if (st.figures.length) {
+            const fi = st.selectedFigureIndex >= 0 ? st.selectedFigureIndex : 0;
+            st.figures[fi].yawDeg = v;
+            syncGridStageThree(nodeId);
+          }
+        });
+        syncGridFromLinks(nodeId);
+      }
+      if (type === 'gen') {
+        el.querySelectorAll('.js-tag-ins').forEach((b) => {
+          b.addEventListener('click', () => {
+            const ta = el.querySelector('.js-gen-prompt');
+            ta.value += b.dataset.t;
+            ta.focus();
+          });
+        });
+        el.querySelector('.js-gen-go').addEventListener('click', async () => {
+          const status = el.querySelector('.js-gen-status');
+          const loading = el.querySelector('.js-gen-loading');
+          const empty = el.querySelector('.js-gen-result-empty');
+          const img = el.querySelector('.js-gen-result-img');
+          const rmsg = el.querySelector('.js-gen-result-msg');
+          const btn = el.querySelector('.js-gen-go');
+          const ctx = collectGenContext(nodeId);
+          const sceneDesc = (el.querySelector('.js-scene-desc') && el.querySelector('.js-scene-desc').value) || '';
+          const mainPrompt = (el.querySelector('.js-gen-prompt') && el.querySelector('.js-gen-prompt').value) || '';
+          const canvasAspect = el.querySelector('.js-gen-aspect').value;
+          const { aspect_ratio, hint } = mapCanvasAspectForApi(canvasAspect);
+          const gnode = state.nodes[nodeId];
+          if (gnode) {
+            gnode.lastGenImageUrl = null;
+            gnode.lastGenPrompt = null;
+          }
+          el.querySelector('.js-gen-actions')?.classList.add('hidden');
+          const resolution = (el.querySelector('.js-gen-resolution') && el.querySelector('.js-gen-resolution').value) || '1K';
+          const gridCells = normalizeGenGridCells(
+            el.querySelector('.js-gen-grid') && el.querySelector('.js-gen-grid').value
+          );
+          const gridBlock = buildGenGridInstruction(gridCells);
+          loading.classList.remove('hidden');
+          empty.classList.add('hidden');
+          img.classList.add('hidden');
+          img.removeAttribute('src');
+          img.onclick = null;
+          img.onload = null;
+          img.onerror = null;
+          img.removeAttribute('title');
+          if (rmsg) {
+            rmsg.textContent = '';
+            rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-gray-400';
+          }
+          status.textContent = '正在上传参考图…';
+          btn.disabled = true;
+          let refBundle = { textBlock: '', reference_urls: [], reference_url: null };
+          try {
+            refBundle = await buildReferenceBlockForGen(nodeId);
+          } catch (e) {
+            if (rmsg) {
+              rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-amber-400';
+              rmsg.textContent = '参考图上传阶段异常：' + (e.message || String(e));
+            }
+          }
+          const meta =
+            '【画布参数】比例:' +
+            canvasAspect +
+            (hint ? ' ' + hint : '') +
+            '；站位格:#' +
+            ctx.gridSlot +
+            '；角色Yaw:' +
+            ctx.charYaw +
+            '°；风格:' +
+            ctx.style +
+            '；已连场景截取:' +
+            (ctx.hasSceneShot ? '是' : '否') +
+            '；角色图:' +
+            (ctx.hasChar1 ? '有' : '无') +
+            (ctx.hasChar2 ? '+双' : '') +
+            '；道具参考:' +
+            (ctx.hasProp ? '有' : '无') +
+            '；参考图URL段落:' +
+            (refBundle.textBlock ? '已写入提示词' : '无（未连线或未截取全景/站位）') +
+            '；分镜宫格:' +
+            genGridLabel(gridCells) +
+            '。';
+          const fullPrompt = [mainPrompt.trim(), sceneDesc.trim(), refBundle.textBlock, gridBlock, meta]
+            .filter(Boolean)
+            .join('\n\n');
+          if (!mainPrompt.trim() && !sceneDesc.trim() && !refBundle.textBlock) {
+            loading.classList.add('hidden');
+            btn.disabled = false;
+            status.textContent = '';
+            if (rmsg) {
+              rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-amber-400';
+              rmsg.textContent =
+                '请填写「合成指令」或「场景补充描述」，或连接全景（并点「截取当前视角」）/站位/角色/道具参考节点后再生成。';
+            }
+            return;
+          }
+          status.textContent = '';
+          try {
+            const genBody = {
+              prompt: fullPrompt,
+              aspect_ratio,
+              resolution,
+            };
+            if (refBundle.reference_urls && refBundle.reference_urls.length) {
+              genBody.reference_urls = refBundle.reference_urls;
+            }
+            if (refBundle.reference_url) genBody.reference_url = refBundle.reference_url;
+            status.textContent = '正在提交生成任务…';
+            let j;
+            let r;
+            try {
+              const pr = await postGenerateImageCanvas(genBody, (t) => {
+                status.textContent = t;
+              });
+              if (pr.unauthorized) {
+                j = pr.j;
+                r = pr.r;
+              } else if (pr.error) {
+                j = pr.j;
+                r = pr.r;
+              } else {
+                r = { status: 200, ok: true };
+                j = {
+                  code: 200,
+                  data: {
+                    image_url: pr.data.image_url,
+                    imageUrl: pr.data.image_url,
+                    model: pr.data.model,
+                    balance: pr.data.balance,
+                  },
+                };
+              }
+            } catch (pollErr) {
+              loading.classList.add('hidden');
+              btn.disabled = false;
+              status.textContent = '生成失败';
+              empty.classList.remove('hidden');
+              if (rmsg) {
+                rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-red-400';
+                rmsg.textContent = pollErr && pollErr.message ? pollErr.message : String(pollErr);
+              }
+              return;
+            }
+            const unauthorized = r.status === 401 || j.code === 401;
+            if (unauthorized) {
+              status.textContent = '需要登录';
+              if (rmsg) {
+                rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-amber-300';
+                rmsg.textContent =
+                  '未检测到登录状态。请先在主站「讯语AI-v1」页面登录同一账号，再刷新本画布重试（须同域名以携带 Cookie）。';
+              }
+              empty.classList.remove('hidden');
+              return;
+            }
+            if (j.code === 200 && j.data) {
+              const rawOut =
+                normalizeGenImageUrl(j.data.image_url) || normalizeGenImageUrl(j.data.imageUrl);
+              if (!rawOut) {
+                status.textContent = '生成失败';
+                empty.classList.remove('hidden');
+                if (rmsg) {
+                  rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-red-400';
+                  rmsg.textContent =
+                    '接口未返回可用的图片地址（image_url 为空或无法解析）。';
+                }
+              } else {
+              if (gnode) {
+                gnode.lastGenImageUrl = rawOut;
+                gnode.lastGenPrompt = fullPrompt;
+              }
+              if (typeof window.__canvasDirectorSetLastGen === 'function') {
+                try {
+                  window.__canvasDirectorSetLastGen(rawOut);
+                } catch (_) {}
+              }
+              try {
+                notifyDirectorShotImage(rawOut);
+              } catch (_) {}
+              recordUserGeneratedAssetForCenter(rawOut, 'image');
+              const safe = canvasSafeImageUrl(rawOut);
+              status.textContent = safe ? '生成完成 · 小图可点击放大' : '生成完成 · 地址异常请用按钮打开';
+              empty.classList.add('hidden');
+              if (safe) {
+                img.onload = () => {
+                  img.onerror = null;
+                };
+                img.onerror = () => {
+                  img.classList.add('hidden');
+                  empty.classList.remove('hidden');
+                  if (rmsg) {
+                    rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-amber-400';
+                    rmsg.textContent = '缩略图加载失败，可点下方「浏览器打开」查看原图。';
+                  }
+                };
+                img.onclick = (ev) => {
+                  ev.preventDefault();
+                  openGenImageInNewWindow(rawOut);
+                };
+                img.title = '点击在新标签页打开原图（可右键另存为）';
+                img.src = '';
+                requestAnimationFrame(() => {
+                  img.src = safe;
+                  img.classList.remove('hidden');
+                });
+              } else {
+                empty.classList.remove('hidden');
+                if (rmsg) {
+                  rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-amber-400';
+                  rmsg.textContent = '返回的图片地址格式异常，请使用下方「浏览器打开」重试。';
+                }
+              }
+              if (rmsg && safe) {
+                let line =
+                  (j.data.model ? '模型: ' + j.data.model + ' · ' : '') +
+                  ('分辨率: ' + resolution + ' · ') +
+                  (typeof j.data.balance === 'number' ? '当前积分: ' + j.data.balance : '');
+                rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-emerald-400/90';
+                rmsg.textContent = (line || '已生成。') + ' 可右键本节点添加「微调」。';
+              }
+              el.querySelector('.js-gen-actions')?.classList.remove('hidden');
+              }
+            } else {
+              status.textContent = '生成失败';
+              empty.classList.remove('hidden');
+              if (rmsg) {
+                rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-red-400';
+                rmsg.textContent = j.msg || '未知错误（HTTP ' + r.status + '）';
+              }
+            }
+          } catch (err) {
+            status.textContent = '请求异常';
+            empty.classList.remove('hidden');
+            if (rmsg) {
+              rmsg.className = 'js-gen-result-msg text-[11px] min-h-[1rem] text-red-400';
+              rmsg.textContent = '网络或脚本错误：' + (err && err.message ? err.message : String(err));
+            }
+          } finally {
+            loading.classList.add('hidden');
+            btn.disabled = false;
+          }
+        });
+        el.querySelector('.js-gen-browser')?.addEventListener('click', () => {
+          openGenImageInNewWindow(state.nodes[nodeId]?.lastGenImageUrl);
+        });
+      }
+      if (type === 'refine') {
+        const stEl = el.querySelector('.js-refine-status');
+        const loading = el.querySelector('.js-refine-loading');
+        const empty = el.querySelector('.js-refine-result-empty');
+        const img = el.querySelector('.js-refine-result-img');
+        el.querySelector('.js-refine-go').addEventListener('click', async () => {
+          const tweak = (el.querySelector('.js-refine-tweak').value || '').trim();
+          if (!tweak) {
+            if (stEl) stEl.textContent = '请填写微调说明。';
+            return;
+          }
+          const incomers = state.links
+            .filter((l) => l.to === nodeId)
+            .map((l) => state.nodes[l.from])
+            .filter(Boolean);
+          const srcGen = incomers.find((n) => n.type === 'gen');
+          if (!srcGen?.lastGenImageUrl) {
+            if (stEl) {
+              stEl.textContent =
+                '请先将上游「资产生成」成功出图，并从其右侧输出口拖线连到本节点左侧。';
+            }
+            return;
+          }
+          const rnode = state.nodes[nodeId];
+          if (rnode) rnode.lastRefineImageUrl = null;
+          el.querySelector('.js-refine-actions')?.classList.add('hidden');
+          loading?.classList.remove('hidden');
+          empty?.classList.add('hidden');
+          if (img) {
+            img.classList.add('hidden');
+            img.removeAttribute('src');
+            img.onclick = null;
+            img.onload = null;
+            img.onerror = null;
+            img.removeAttribute('title');
+          }
+          const ra = el.querySelector('.js-refine-aspect').value;
+          const rr = el.querySelector('.js-refine-resolution').value;
+          const rs = el.querySelector('.js-refine-style').value;
+          const { aspect_ratio } = mapCanvasAspectForApi(ra);
+          const basePrompt =
+            srcGen.lastGenPrompt ||
+            '【二次生成】基于上游资产生成节点的出图结果进行优化，请保持主体与构图一致性。';
+          const meta = '【微调节点参数】比例:' + ra + '；分辨率:' + rr + '；风格:' + rs + '。';
+          const fullRefinePrompt = basePrompt + '\n\n【用户微调要求】\n' + tweak + '\n\n' + meta;
+          if (stEl) stEl.textContent = '正在上传上游成图并请求生成…';
+          const btn = el.querySelector('.js-refine-go');
+          btn.disabled = true;
+          try {
+            let refPath;
+            try {
+              refPath = await resolveImageRefForGen(srcGen.lastGenImageUrl, 'refine-from-gen.png');
+            } catch (e) {
+              if (stEl) stEl.textContent = '上游图上传失败：' + (e.message || String(e));
+              empty?.classList.remove('hidden');
+              return;
+            }
+            if (!refPath) {
+              if (stEl) stEl.textContent = '未能得到上游图的上传地址。';
+              empty?.classList.remove('hidden');
+              return;
+            }
+            const abs = absoluteSiteUrl(refPath);
+            const refineBody = {
+              prompt: fullRefinePrompt,
+              aspect_ratio,
+              resolution: rr,
+              reference_urls: [abs],
+              reference_url: abs,
+            };
+            if (stEl) stEl.textContent = '正在提交生成任务…';
+            let j;
+            let r;
+            try {
+              const pr = await postGenerateImageCanvas(refineBody, (t) => {
+                if (stEl) stEl.textContent = t;
+              });
+              if (pr.unauthorized) {
+                j = pr.j;
+                r = pr.r;
+              } else if (pr.error) {
+                j = pr.j;
+                r = pr.r;
+              } else {
+                r = { status: 200, ok: true };
+                j = {
+                  code: 200,
+                  data: {
+                    image_url: pr.data.image_url,
+                    imageUrl: pr.data.image_url,
+                    model: pr.data.model,
+                    balance: pr.data.balance,
+                  },
+                };
+              }
+            } catch (pollErr) {
+              if (stEl) stEl.textContent = pollErr && pollErr.message ? pollErr.message : String(pollErr);
+              empty?.classList.remove('hidden');
+              return;
+            }
+            if (r.status === 401 || j.code === 401) {
+              if (stEl) stEl.textContent = '请先登录。';
+              empty?.classList.remove('hidden');
+              return;
+            }
+            if (j.code === 200 && j.data) {
+              const rawOut =
+                normalizeGenImageUrl(j.data.image_url) || normalizeGenImageUrl(j.data.imageUrl);
+              if (!rawOut) {
+                empty?.classList.remove('hidden');
+                if (stEl) {
+                  stEl.textContent =
+                    '接口未返回可用的图片地址（image_url 为空或无法解析）。';
+                }
+              } else {
+              if (rnode) rnode.lastRefineImageUrl = rawOut;
+              if (typeof window.__canvasDirectorSetLastGen === 'function') {
+                try {
+                  window.__canvasDirectorSetLastGen(rawOut);
+                } catch (_) {}
+              }
+              try {
+                notifyDirectorShotImage(rawOut);
+              } catch (_) {}
+              recordUserGeneratedAssetForCenter(rawOut, 'image');
+              const safe = canvasSafeImageUrl(rawOut);
+              if (stEl) {
+                stEl.textContent = safe
+                  ? '生成完成 · 小图可点击放大' +
+                    (typeof j.data.balance === 'number' ? ' · 当前积分: ' + j.data.balance : '')
+                  : '生成完成 · 地址异常请用下方按钮打开';
+              }
+              empty?.classList.add('hidden');
+              if (img && safe) {
+                img.onload = () => {
+                  img.onerror = null;
+                };
+                img.onerror = () => {
+                  img.classList.add('hidden');
+                  empty?.classList.remove('hidden');
+                  if (stEl) {
+                    stEl.textContent = '缩略图加载失败，可点下方「浏览器打开」查看原图。';
+                  }
+                };
+                img.onclick = (ev) => {
+                  ev.preventDefault();
+                  openGenImageInNewWindow(rawOut);
+                };
+                img.title = '点击在新标签页打开原图（可右键另存为）';
+                img.src = '';
+                requestAnimationFrame(() => {
+                  img.src = safe;
+                  img.classList.remove('hidden');
+                });
+              } else if (!safe) {
+                empty?.classList.remove('hidden');
+                if (stEl) {
+                  stEl.textContent =
+                    '返回的图片地址格式异常，请使用下方「浏览器打开」重试。' +
+                    (typeof j.data.balance === 'number' ? ' · 当前积分: ' + j.data.balance : '');
+                }
+              }
+              if (safe) el.querySelector('.js-refine-actions')?.classList.remove('hidden');
+              }
+            } else {
+              empty?.classList.remove('hidden');
+              if (stEl) stEl.textContent = j.msg || '生成失败';
+            }
+          } catch (err) {
+            empty?.classList.remove('hidden');
+            if (stEl) stEl.textContent = err.message || String(err);
+          } finally {
+            loading?.classList.add('hidden');
+            btn.disabled = false;
+          }
+        });
+        el.querySelector('.js-refine-browser')?.addEventListener('click', () => {
+          openGenImageInNewWindow(state.nodes[nodeId]?.lastRefineImageUrl);
+        });
+      }
+    }
+
+    function nodeHtml(type) {
+      if (type === 'pano') {
+        return `
+        <div class="node-header"><i class="fa fa-globe text-cyan-400"></i> 360° 全景场景</div>
+        <div class="node-body">
+          <div class="three-wrap js-three-host cursor-crosshair" title="先点击此处，再在框内滚轮缩放视角"></div>
+          <p class="text-[10px] text-gray-500 mt-2">上传等距柱状全景图，拖拽旋转视角；点「截取」后画面写入下方「场景图」并同步<strong>已连线</strong>站位底图。无全景时，超级编导可从分镜<strong>自动</strong>把场景参考或分镜成图填入下方「场景图」区域（不作全景球贴图）。</p>
+          <div class="flex gap-2 mt-2">
+            <button type="button" class="js-pano-up flex-1 py-2 rounded-lg bg-blue-600/30 text-blue-300 text-xs border border-blue-500/30 hover:bg-blue-600/50">上传全景</button>
+            <button type="button" class="js-pano-cap flex-1 py-2 rounded-lg bg-purple-600/40 text-white text-xs border border-purple-500/40 hover:bg-purple-600/60">截取当前视角</button>
+          </div>
+          <div class="js-pano-scene-wrap hidden mt-2 rounded-lg border border-cyan-500/25 bg-cyan-950/20 p-2">
+            <p class="text-[10px] text-cyan-200/90 leading-snug js-pano-scene-caption"></p>
+          </div>
+        </div>
+        <div class="port port-out" data-port-type="out"></div>`;
+      }
+      if (type === 'scene') {
+        return `
+        <div class="node-header"><i class="fa fa-image text-sky-400"></i> 图片场景</div>
+        <div class="node-body">
+          <p class="text-[10px] text-gray-500 mb-2">平面场景参考（非 360° 等距柱状图）。与超级编导「角色」页<strong>场景</strong>库对应；打开分镜无限画布时，主体参考中的场景图会<strong>自动</strong>生成本节点并连到资产生成；无全景时也会写入左侧「360° 全景场景」节点下方<strong>场景图</strong>区域。请连线到「资产生成」与「站位」。</p>
+          <div class="js-scene-preview w-full h-36 bg-black/40 rounded-lg border border-sky-600/35 flex items-center justify-center text-gray-600 text-xs">未设置</div>
+          <button type="button" class="js-scene-pick w-full mt-2 py-2 rounded-lg bg-sky-800/30 text-sky-100 text-xs border border-sky-500/35">选择图片</button>
+        </div>
+        <div class="port port-out" data-port-type="out"></div>`;
+      }
+      if (type === 'char') {
+        return `
+        <div class="node-header"><i class="fa fa-user text-green-400"></i> 角色三视图</div>
+        <div class="node-body">
+          <p class="text-[10px] text-gray-500 mb-2">与<strong>超级编导 · 演员</strong>参考对应：从分镜打开无限画布时，主体参考里识别为「演员」的图会<strong>优先按顺序</strong>填入前两个本节点（再补本地上传等非场景/非道具图）。可上传正面/侧面/背面合成或拼图。右键可「再添加角色」。连到<strong>站位</strong>时按<strong>连线先后顺序</strong>对应假人 1、2、3…；生成仍使用本图。</p>
+          <div class="js-char-preview w-full h-36 bg-black/40 rounded-lg border border-gray-600 flex items-center justify-center text-gray-600 text-xs">未上传</div>
+          <button type="button" class="js-char-pick w-full mt-2 py-2 rounded-lg bg-green-600/25 text-green-300 text-xs border border-green-500/30">选择图片</button>
+        </div>
+        <div class="port port-out" data-port-type="out"></div>`;
+      }
+      if (type === 'prop') {
+        return `
+        <div class="node-header"><i class="fa fa-cube text-amber-400"></i> 道具参考</div>
+        <div class="node-body">
+          <p class="text-[10px] text-gray-500 mb-2">与超级编导「角色」页<strong>道具</strong>库对应；打开分镜无限画布时，主体参考中的道具图会自动出现在此。请连线到「资产生成」，出图时与角色图一并上传并写入提示词。</p>
+          <div class="js-prop-preview w-full h-36 bg-black/40 rounded-lg border border-amber-600/35 flex items-center justify-center text-gray-600 text-xs">未设置</div>
+          <button type="button" class="js-prop-pick w-full mt-2 py-2 rounded-lg bg-amber-800/30 text-amber-100 text-xs border border-amber-500/35">选择图片</button>
+        </div>
+        <div class="port port-out" data-port-type="out"></div>`;
+      }
+      if (type === 'grid') {
+        let g = `
+        <div class="node-header"><i class="fa fa-th text-violet-400"></i> 站位 · 角度调教</div>
+        <div class="node-body">
+          <p class="text-[10px] text-gray-500 mb-2">参考「舞台排布」交互：<strong>假人/相机</strong>双模式、头顶编号、阵型铺满；点<strong>快照</strong>仅在本节点更新预览（不下载文件）。角色按<strong>连线顺序</strong>对应 1、2、3… 假人模式：<strong>拖</strong>移动、<strong>Shift+拖</strong>转向、滚轮 Yaw；相机模式：旋转俯视。</p>
+          <div class="js-grid-stage-wrap js-grid-stage relative mb-2" style="aspect-ratio:16/9; min-height:220px;">
+            <div class="js-grid-stage-bg absolute inset-0 z-0 bg-gradient-to-b from-slate-900 to-black"></div>
+            <div class="js-grid-stage-3d absolute inset-0 z-[2]"></div>
+            <div class="js-grid-stage-hud">
+              <button type="button" class="js-grid-hud-zoom-in" title="拉近视角"><i class="fa fa-plus"></i></button>
+              <button type="button" class="js-grid-hud-zoom-out" title="拉远视角"><i class="fa fa-minus"></i></button>
+              <button type="button" class="js-grid-hud-reset-view" title="复位相机"><i class="fa fa-refresh"></i></button>
+              <button type="button" class="js-grid-hud-floor" title="地面深浅（不透明度）"><i class="fa fa-adjust"></i></button>
+            </div>
+          </div>
+          <div class="js-grid-toolbar space-y-2 mb-2 text-[10px] text-slate-300">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <div class="js-grid-mode-wrap">
+                <button type="button" class="js-grid-mode-dummy px-3 py-1.5 text-xs font-medium">假人</button>
+                <button type="button" class="js-grid-mode-camera px-3 py-1.5 text-xs font-medium">相机</button>
+              </div>
+              <span class="text-slate-600">|</span>
+              <button type="button" class="js-grid-tb-icon js-grid-rot-ccw" title="选中假人逆时针 15°"><i class="fa fa-undo"></i></button>
+              <button type="button" class="js-grid-tb-icon js-grid-rot-cw" title="选中假人顺时针 15°"><i class="fa fa-rotate-right"></i></button>
+              <button type="button" class="js-grid-tb-icon js-grid-add-fig bg-cyan-900/30 border-cyan-600/40" title="增加假人"><i class="fa fa-plus"></i></button>
+              <button type="button" class="js-grid-tb-icon js-grid-del-fig bg-red-900/25 border-red-600/35 text-red-200" title="删除选中假人"><i class="fa fa-trash"></i></button>
+              <span class="js-grid-fig-count text-slate-400 font-semibold tabular-nums px-1">0 个</span>
+              <label class="flex items-center gap-1 text-slate-400 ml-1">比例<input type="range" class="js-grid-scale-slider w-16 accent-cyan-500" min="0.35" max="2.4" step="0.05" value="1"></label>
+              <button type="button" class="js-grid-tb-icon js-grid-toggle-hide" title="显示/隐藏选中假人"><i class="fa fa-eye"></i></button>
+              <button type="button" class="js-grid-snapshot ml-auto px-2.5 py-1 rounded-lg bg-amber-900/35 border border-amber-600/40 text-amber-100 hover:bg-amber-800/45 text-xs font-medium">快照</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 pt-1.5 border-t border-slate-700/60">
+              <span class="text-slate-500 shrink-0">阵型</span>
+              <input type="number" min="1" max="12" value="3" class="js-grid-form-cols w-9 text-center text-xs bg-slate-900 border border-slate-600 rounded py-0.5 text-slate-200">
+              <span class="text-slate-500">×</span>
+              <input type="number" min="1" max="12" value="3" class="js-grid-form-rows w-9 text-center text-xs bg-slate-900 border border-slate-600 rounded py-0.5 text-slate-200">
+              <button type="button" class="js-grid-form-apply px-2.5 py-1 rounded-md bg-amber-800/40 border border-amber-500/45 text-amber-50 font-medium">阵</button>
+              <button type="button" class="js-grid-shuffle px-2.5 py-1 rounded-md bg-slate-800 border border-slate-600 text-slate-300 hover:bg-slate-700" title="随机散布假人">散</button>
+              <button type="button" class="js-grid-cam-reset px-2 py-1 rounded-md border border-slate-600 bg-slate-800/80 text-slate-400 hover:text-white ml-auto" title="同右上角复位">复位相机</button>
+            </div>
+            <p class="js-grid-snap-tip text-[10px] text-emerald-400/90 min-h-[1rem]"></p>
+            <div class="js-grid-snap-preview-wrap hidden mt-1 rounded border border-amber-500/20 bg-black/30 p-1">
+              <p class="text-[9px] text-amber-200/80 mb-0.5">最近一次「快照」缩略图（仅节点内预览；生图时会重新截取当前站位画面并上传）</p>
+            </div>
+          </div>
+          <label class="text-[11px] text-gray-500">选中假人朝向 · Yaw <span class="js-yaw-val text-purple-300">0°</span></label>
+          <input type="range" class="js-yaw-slider w-full accent-purple-500" min="0" max="360" value="0">
+        </div>
+        <div class="port port-in" data-port-type="in"></div>
+        <div class="port port-out" data-port-type="out"></div>`;
+        return g;
+      }
+      if (type === 'gen') {
+        return `
+        <div class="node-header"><i class="fa fa-magic text-fuchsia-400"></i> 资产生成 <span class="text-[10px] font-normal text-gray-500">（含空间场景参数）</span></div>
+        <div class="node-body space-y-2">
+          <p class="text-[10px] text-gray-500">比例、风格、场景描述已合并于此；请连线 <strong>站位</strong>、<strong>全景</strong>或<strong>图片场景</strong>、<strong>角色</strong>、<strong>道具参考</strong>（可选）。点击生成前会将<strong>场景图</strong>（全景截取优先，否则图片场景节点或编导带入的平面场景）、<strong>站位当前画面</strong>、<strong>角色图</strong>、<strong>道具参考图</strong>上传至本站，并以<strong>文字+URL</strong>写入提示词；同时尽量带一张主参考图调用 API。</p>
+          <label class="text-[11px] text-gray-500">画面比例（生成）</label>
+          <select class="js-gen-aspect w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm">
+            <option value="16:9" selected>16:9 横屏</option>
+            <option value="9:16">9:16 竖屏</option>
+            <option value="1:1">1:1 方图</option>
+            <option value="4:3">4:3</option>
+            <option value="21:9">21:9 电影宽屏</option>
+          </select>
+          <label class="text-[11px] text-gray-500">输出分辨率（1K / 2K / 4K）</label>
+          <select class="js-gen-resolution w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm">
+            <option value="1K">1K</option>
+            <option value="2K">2K</option>
+            <option value="4K" selected>4K</option>
+          </select>
+          <label class="text-[11px] text-gray-500">分镜宫格（单张图内多格排版）</label>
+          <select class="js-gen-grid w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm" title="在提示词中附加宫格构图要求，由模型在一张图内划分格子">
+            <option value="1">1 宫格 · 单幅全图</option>
+            <option value="2">2 宫格 · 左右两格</option>
+            <option value="3" selected>3 宫格 · 1×3 横排三格</option>
+            <option value="4">4 宫格 · 2×2</option>
+            <option value="6">6 宫格 · 2×3</option>
+            <option value="9">9 宫格 · 3×3</option>
+          </select>
+          <label class="text-[11px] text-gray-500">风格</label>
+          <select class="js-sel-style w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm">
+            <option selected>写实电影</option>
+            <option>真人电影</option>
+            <option>动漫渲染</option>
+            <option>赛博朋克</option>
+            <option>水墨写意</option>
+          </select>
+          <label class="text-[11px] text-gray-500">场景补充描述</label>
+          <textarea class="js-scene-desc w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-xs resize-y min-h-[2.5rem]" rows="2" placeholder="光线、时间、氛围、空间关系…"></textarea>
+          <div class="border-t border-white/10 pt-2 mt-1"></div>
+          <label class="text-[11px] text-gray-500">合成指令（可含标签）</label>
+          <textarea class="js-gen-prompt w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-xs font-mono flex-1 min-h-[5rem] resize-y" rows="4" placeholder="@场景 @角色 在选定站位，按设定比例生成…"></textarea>
+          <div class="flex gap-2 text-[10px] text-gray-500 flex-wrap">
+            <button type="button" class="js-tag-ins px-2 py-1 rounded bg-white/5 border border-white/10" data-t="@场景 ">@场景</button>
+            <button type="button" class="js-tag-ins px-2 py-1 rounded bg-white/5 border border-white/10" data-t="@角色 ">@角色</button>
+            <button type="button" class="js-tag-ins px-2 py-1 rounded bg-white/5 border border-white/10" data-t="@角色2 ">@角色2</button>
+          </div>
+          <button type="button" class="js-gen-go w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold shadow-lg shadow-purple-900/40 disabled:opacity-50 disabled:cursor-not-allowed">生成画面</button>
+          <div class="js-gen-result-wrap relative mt-2 rounded-xl border border-violet-500/25 bg-black/35 overflow-hidden min-h-[140px]">
+            <div class="js-gen-loading hidden absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/88 backdrop-blur-sm px-3">
+              <span class="h-9 w-9 rounded-full border-2 border-fuchsia-400 border-t-transparent animate-spin inline-block"></span>
+              <span class="text-[12px] text-fuchsia-100 font-medium text-center">正在生成画面…</span>
+              <span class="text-[10px] text-gray-500 text-center leading-snug">异步任务 <code class="text-violet-300">POST /api/generate/image</code> + 轮询状态，避免长时间等待被网关断开</span>
+            </div>
+            <div class="js-gen-result-empty flex flex-col items-center justify-center min-h-[88px] px-3 py-4 text-[11px] text-gray-500 text-center leading-relaxed">
+              <span>缩略预览</span>
+              <span class="text-gray-600 mt-1 text-[10px]">生成后显示小图（限高减轻卡顿）；点小图或下方按钮在浏览器打开，可右键「图片另存为」</span>
+            </div>
+            <img
+              class="js-gen-result-img hidden mx-auto my-2 max-h-40 max-w-full rounded-lg border border-white/15 object-contain bg-black/45 cursor-pointer shadow-md"
+              alt="生成结果缩略图"
+              loading="lazy"
+              decoding="async"
+              referrerpolicy="no-referrer"
+            />
+          </div>
+          <div class="js-gen-actions hidden mt-2">
+            <button
+              type="button"
+              class="js-gen-browser w-full py-2.5 rounded-lg bg-slate-700/75 border border-slate-500/45 text-slate-100 text-xs font-medium hover:bg-slate-600/75"
+              title="在新标签页打开原图，便于浏览与右键保存"
+            >
+              <i class="fa fa-external-link mr-1.5"></i>浏览器打开（浏览 / 右键另存为）
+            </button>
+          </div>
+          <p class="js-gen-result-msg text-[11px] min-h-[1.25rem] text-gray-500 mt-1"></p>
+          <p class="js-gen-status text-[11px] text-gray-500 min-h-[1rem]"></p>
+        </div>
+        <div class="port port-in" data-port-type="in"></div>
+        <div class="port port-out" data-port-type="out"></div>`;
+      }
+      if (type === 'refine') {
+        return `
+        <div class="node-header"><i class="fa fa-pencil text-amber-400"></i> 微调 · 二次生成</div>
+        <div class="node-body space-y-2">
+          <p class="text-[10px] text-gray-500">请从<strong>资产生成</strong>右侧接口拖线连到本节点左侧。基于上游已生成图 + 下方说明再次出图；结果区显示<strong>缩略预览</strong>，可用下方按钮在浏览器中打开并右键另存为。</p>
+          <label class="text-[11px] text-gray-500">画面比例</label>
+          <select class="js-refine-aspect w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-xs">
+            <option value="16:9" selected>16:9 横屏</option>
+            <option value="9:16">9:16 竖屏</option>
+            <option value="1:1">1:1</option>
+            <option value="4:3">4:3</option>
+            <option value="3:4">3:4</option>
+          </select>
+          <label class="text-[11px] text-gray-500">分辨率</label>
+          <select class="js-refine-resolution w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-xs">
+            <option value="1K">1K</option>
+            <option value="2K">2K</option>
+            <option value="4K" selected>4K</option>
+          </select>
+          <label class="text-[11px] text-gray-500">风格</label>
+          <select class="js-refine-style w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1.5 text-xs">
+            <option selected>写实电影</option>
+            <option>真人电影</option>
+            <option>动漫渲染</option>
+            <option>赛博朋克</option>
+            <option>水墨写意</option>
+          </select>
+          <label class="text-[11px] text-gray-500">微调说明（必填）</label>
+          <textarea class="js-refine-tweak w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-xs resize-y min-h-[4.5rem]" rows="4" placeholder="例：整体色调更暖、去掉画面右侧杂物、人物表情改为微笑…"></textarea>
+          <button type="button" class="js-refine-go w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-700 to-orange-700 text-white text-xs font-semibold border border-amber-500/40 disabled:opacity-50">开始二次生成</button>
+          <div class="js-refine-result-wrap relative mt-2 rounded-xl border border-amber-500/25 bg-black/35 overflow-hidden min-h-[120px]">
+            <div class="js-refine-loading hidden absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/88 backdrop-blur-sm px-3">
+              <span class="h-9 w-9 rounded-full border-2 border-amber-400 border-t-transparent animate-spin inline-block"></span>
+              <span class="text-[12px] text-amber-100 font-medium text-center">正在二次生成…</span>
+              <span class="text-[10px] text-gray-500 text-center leading-snug">上传参考后同样走异步出图 + 轮询 <code class="text-amber-300">/api/generate/image/status</code></span>
+            </div>
+            <div class="js-refine-result-empty flex flex-col items-center justify-center min-h-[88px] px-3 py-4 text-[11px] text-gray-500 text-center leading-relaxed">
+              <span>二次结果 · 缩略预览</span>
+              <span class="text-gray-600 mt-1 text-[10px]">生成后显示小图；点小图或下方按钮在浏览器打开，可右键「图片另存为」</span>
+            </div>
+            <img
+              class="js-refine-result-img hidden mx-auto my-2 max-h-40 max-w-full rounded-lg border border-white/15 object-contain bg-black/45 cursor-pointer shadow-md"
+              alt="二次生成缩略图"
+              loading="lazy"
+              decoding="async"
+              referrerpolicy="no-referrer"
+            />
+          </div>
+          <div class="js-refine-actions hidden mt-2">
+            <button
+              type="button"
+              class="js-refine-browser w-full py-2.5 rounded-lg bg-slate-700/75 border border-slate-500/45 text-slate-100 text-xs font-medium hover:bg-slate-600/75"
+              title="在新标签页打开原图，便于浏览与右键保存"
+            >
+              <i class="fa fa-external-link mr-1.5"></i>浏览器打开（浏览 / 右键另存为）
+            </button>
+          </div>
+          <p class="js-refine-status text-[11px] text-gray-500 min-h-[1rem]"></p>
+        </div>
+        <div class="port port-in" data-port-type="in"></div>`;
+      }
+      return '';
+    }
+
+    function nodeWidth(type) {
+      const w = { pano: '360px', scene: '300px', char: '300px', prop: '280px', grid: '460px', gen: '420px', refine: '380px' };
+      return w[type] || '320px';
+    }
+
+    function spawnNode(type, x, y) {
+      const nodeId = 'n' + ++state.nodeSeq + '_' + type;
+      const el = document.createElement('div');
+      el.className = 'studio-node';
+      el.style.width = nodeWidth(type);
+      if (type === 'pano') el.style.minHeight = '300px';
+      if (type === 'grid') el.style.minHeight = '420px';
+      if (type === 'gen') el.style.minHeight = '620px';
+      if (type === 'refine') el.style.minHeight = '520px';
+      if (type === 'prop') el.style.minHeight = '220px';
+      if (type === 'scene') el.style.minHeight = '220px';
+      el.innerHTML = nodeHtml(type);
+      world.appendChild(el);
+      registerNode(nodeId, el, x, y, type);
+      if (type === 'pano') {
+        const host = el.querySelector('.js-three-host');
+        initThreeForNode(nodeId, host);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resizePanoRendererToContainer(nodeId));
+        });
+      }
+      if (type === 'grid') {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resizeGridStageThree(nodeId));
+        });
+      }
+      wireNode(el, nodeId, type);
+      drawConnections();
+      drawMinimap();
+      return nodeId;
+    }
+
+    function spawnRefineLinkedToGen(genNodeId) {
+      const gn = state.nodes[genNodeId];
+      if (!gn || gn.type !== 'gen') return null;
+      if (!gn.el.querySelector('.port-out')) return null;
+      const x = gn.x + (gn.el.offsetWidth || 420) + 44;
+      const y = gn.y;
+      const rid = spawnNode('refine', x, y);
+      if (rid) addLink(genNodeId, rid);
+      return rid;
+    }
+
+    function removeNode(nodeId) {
+      const n = state.nodes[nodeId];
+      if (!n) return;
+      disposeGridStageThree(nodeId);
+      disposePanoThree(nodeId);
+      state.links = state.links.filter((l) => l.from !== nodeId && l.to !== nodeId);
+      n.el.remove();
+      delete state.nodes[nodeId];
+      drawConnections();
+      drawMinimap();
+      refreshAllGrids();
+    }
+
+    function initCanvas() {
+      for (const id of Object.keys(state.nodes)) {
+        disposeGridStageThree(id);
+        disposePanoThree(id);
+      }
+      world.querySelectorAll('.studio-node').forEach((el) => el.remove());
+      state.nodes = {};
+      state.links = [];
+      state.nodeSeq = 0;
+      applyTransform();
+    }
+
+    /** 首次打开时的示例排布：全景仅直连资产生成；双角色进站位并直连资产生成；站位再连资产生成。 */
+    function spawnDefaultCanvasLayout() {
+      const panoId = spawnNode('pano', 40, 72);
+      const char1Id = spawnNode('char', 40, 452);
+      const char2Id = spawnNode('char', 48, 820);
+      const gridId = spawnNode('grid', 528, 96);
+      const genId = spawnNode('gen', 1060, 88);
+      addLink(panoId, genId);
+      addLink(char1Id, gridId);
+      addLink(char1Id, genId);
+      addLink(char2Id, gridId);
+      addLink(char2Id, genId);
+      addLink(gridId, genId);
+    }
+
+    function mountDirectorShotBridge() {
+      if (document.getElementById('btn-director-push-image')) return;
+      const p = getDirectorCanvasPayload();
+      if (!p || !Number.isFinite(p.shotIdx)) return;
+      let directorLastGenUrl = null;
+      window.__canvasDirectorSetLastGen = (url) => {
+        directorLastGenUrl = url ? String(url).trim() || null : null;
+      };
+      const bar = document.querySelector('.hint-bar');
+      if (!bar) return;
+      const wrap = document.createElement('span');
+      wrap.className =
+        'ml-2 flex flex-wrap items-center gap-2 border-l border-amber-500/25 pl-3 text-amber-100/95 text-[11px]';
+      const embedHint = isDirectorEmbed()
+        ? '<span class="w-full text-emerald-300/95 sm:w-auto">嵌入：<strong>资产生成 / 微调</strong>出图成功后将<strong>自动</strong>写回超级编导。</span>'
+        : '';
+      wrap.innerHTML =
+        embedHint +
+        '<span>超级编导 · 分镜 <strong class="text-amber-200">#' +
+        (p.shotIdx + 1) +
+        '</strong></span>' +
+        '<button type="button" id="btn-director-push-image" class="rounded-md bg-emerald-700/50 border border-emerald-400/40 px-2 py-1 text-[11px] font-medium text-emerald-50 hover:bg-emerald-600/55">手动写回最近成图</button>' +
+        '<button type="button" id="btn-director-clear-shot-ctx" class="text-[10px] text-gray-500 hover:text-gray-300 underline">结束联动</button>';
+      bar.appendChild(wrap);
+      document.getElementById('btn-director-push-image').addEventListener('click', () => {
+        if (!directorLastGenUrl) {
+          alert('请先在「资产生成」或「微调」节点成功出图，再点此按钮。');
+          return;
+        }
+        const pNow = getDirectorCanvasPayload();
+        const sid = pNow && Number.isFinite(pNow.shotIdx) ? pNow.shotIdx : p.shotIdx;
+        if (isDirectorEmbed() && window.parent !== window) {
+          try {
+            window.parent.postMessage(
+              { type: 'xunyu-director-shot-image', shotIdx: sid, imageUrl: directorLastGenUrl },
+              window.location.origin
+            );
+          } catch (e) {
+            alert(e.message || String(e));
+            return;
+          }
+        } else {
+          try {
+            const ch = new BroadcastChannel('xunyu-director-canvas');
+            ch.postMessage({ type: 'shot-image', shotIdx: sid, imageUrl: directorLastGenUrl });
+            ch.close();
+          } catch (e) {
+            alert('发送失败：' + (e.message || String(e)));
+            return;
+          }
+        }
+        alert('已发送到超级编导。');
+      });
+      document.getElementById('btn-director-clear-shot-ctx').addEventListener('click', () => {
+        try {
+          sessionStorage.removeItem('director_canvas_shot');
+        } catch (_) {}
+        window.__directorCanvasInitPayload = null;
+        window.__canvasDirectorSetLastGen = () => {};
+        state.directorGridFallbackBgUrl = '';
+        refreshAllGrids();
+        wrap.remove();
+      });
+    }
+
+    /** 预填场景描述、合成指令；主体参考：演员→角色三视图（优先），道具→道具参考，其余进合成指令 URL */
+    function applyDirectorShotHydration() {
+      const p = getDirectorCanvasPayload();
+      if (!p) return;
+      if (p.nonce && window.__directorHydratedNonce === p.nonce) {
+        mountDirectorShotBridge();
+        return;
+      }
+      if (p.nonce) window.__directorHydratedNonce = p.nonce;
+
+      const desc = String(p.shotDescription || '').trim();
+      const chars = String(p.shotCharacters || '').trim();
+      const refUrls = Array.isArray(p.refUrls)
+        ? p.refUrls.map((u) => String(u || '').trim()).filter(Boolean)
+        : [];
+      let refKinds = Array.isArray(p.refKinds)
+        ? p.refKinds.map((k) => String(k || '').trim().toLowerCase())
+        : [];
+      if (refKinds.length !== refUrls.length) {
+        refKinds = refUrls.map(() => 'other');
+      }
+      const snap = p.assetsSnapshot;
+      if (snap && typeof snap === 'object') {
+        refKinds = refUrls.map((u) => classifyRefUrlAgainstSnapshot(String(u || '').trim(), snap));
+      }
+
+      const charList = Object.values(state.nodes)
+        .filter((n) => n && n.type === 'char')
+        .sort((a, b) => (a.y || 0) - (b.y || 0));
+
+      /** 演员库 → 角色三视图：先按分镜顺序收集演员参考，再补非场景/非道具的其它图，最多 2 张 */
+      const actorUrlsOrdered = [];
+      const otherCharUrlsOrdered = [];
+      for (let i = 0; i < refUrls.length; i++) {
+        const kind = refKinds[i] || 'other';
+        if (kind === 'prop' || kind === 'scene') continue;
+        if (kind === 'actor') actorUrlsOrdered.push(refUrls[i]);
+        else otherCharUrlsOrdered.push(refUrls[i]);
+      }
+      const charFillUrls = actorUrlsOrdered.concat(otherCharUrlsOrdered).slice(0, 2);
+
+      const propUrlList = [];
+      for (let i = 0; i < refUrls.length; i++) {
+        if (refKinds[i] === 'prop') propUrlList.push(refUrls[i]);
+      }
+
+      const charAssigned = new Set(charFillUrls);
+      const propUrlSet = new Set(propUrlList);
+      const extraRefUrls = [];
+      for (let i = 0; i < refUrls.length; i++) {
+        const u = refUrls[i];
+        if (propUrlSet.has(u)) continue;
+        if (charAssigned.has(u)) continue;
+        if (refKinds[i] === 'scene') continue;
+        extraRefUrls.push(u);
+      }
+
+      const sceneRefUrls = [];
+      for (let i = 0; i < refUrls.length; i++) {
+        if (refKinds[i] === 'scene') sceneRefUrls.push(refUrls[i]);
+      }
+      const pano360Src = String(p.pano360Url || '').trim();
+      const shotImgSrc = String(p.shotImageUrl || '').trim();
+      const firstSceneRefEarly = sceneRefUrls[0] ? String(sceneRefUrls[0]).trim() : '';
+      state.directorGridFallbackBgUrl = (pano360Src || firstSceneRefEarly || shotImgSrc).trim();
+
+      const genEntry = Object.values(state.nodes).find((n) => n && n.type === 'gen');
+      if (genEntry && genEntry.el) {
+        const sceneTa = genEntry.el.querySelector('.js-scene-desc');
+        if (sceneTa) {
+          const sceneParts = [];
+          if (desc) sceneParts.push('【超级编导 · 分镜场景/画面描述】\n' + desc);
+          if (chars) sceneParts.push('【出场人物】\n' + chars);
+          const sceneBlock = sceneParts.join('\n\n');
+          if (sceneBlock) {
+            const curS = String(sceneTa.value || '').trim();
+            sceneTa.value = curS ? sceneBlock + '\n\n---\n' + curS : sceneBlock;
+          }
+        }
+        const genTa = genEntry.el.querySelector('.js-gen-prompt');
+        if (genTa) {
+          let genBlock =
+            '【合成指令】按上方「场景补充描述」与连线中的角色/道具/全景或图片场景/站位参考生成与分镜一致的成片；可补充 @场景 @角色 等标签。\n';
+          if (pano360Src) genBlock += '\n【全景环境参考】\n' + pano360Src;
+          if (shotImgSrc && shotImgSrc !== pano360Src) {
+            genBlock += '\n【分镜成图（编导本行）】\n' + shotImgSrc;
+          }
+          if (extraRefUrls.length) {
+            genBlock +=
+              '\n【更多主体参考（URL）】\n' +
+              extraRefUrls.map((u, j) => String(j + 1) + '. ' + u).join('\n');
+          }
+          const curG = String(genTa.value || '').trim();
+          genTa.value = curG ? genBlock + '\n---\n' + curG : genBlock;
+        }
+      }
+
+      if (charFillUrls[0] && charList[0]) setCharNodeRemoteUrl(charList[0].id, charFillUrls[0]);
+      if (charFillUrls[1] && charList[1]) setCharNodeRemoteUrl(charList[1].id, charFillUrls[1]);
+
+      if (propUrlList.length && genEntry && genEntry.id) {
+        const gx = genEntry.x || 0;
+        const gy = genEntry.y || 0;
+        const baseX = Math.max(36, gx - 420);
+        let py = Math.max(980, gy + 420);
+        for (let pi = 0; pi < propUrlList.length; pi++) {
+          const pid = spawnNode('prop', baseX + (pi % 2) * 288, py + Math.floor(pi / 2) * 220);
+          setPropNodeRemoteUrl(pid, propUrlList[pi]);
+          addLink(pid, genEntry.id);
+        }
+        drawConnections();
+        drawMinimap();
+      }
+
+      if (sceneRefUrls.length && genEntry && genEntry.id) {
+        const gx = genEntry.x || 0;
+        const gy = genEntry.y || 0;
+        const baseX = Math.max(36, gx - 420);
+        const scY = Math.max(620, gy + 200);
+        for (let si = 0; si < sceneRefUrls.length; si++) {
+          const sid = spawnNode('scene', baseX + (si % 2) * 288, scY + Math.floor(si / 2) * 220);
+          setSceneNodeRemoteUrl(sid, sceneRefUrls[si]);
+          addLink(sid, genEntry.id);
+        }
+        drawConnections();
+        drawMinimap();
+      }
+
+      const firstSceneRef = sceneRefUrls[0] ? String(sceneRefUrls[0]).trim() : '';
+      const flatForSceneModule = pano360Src ? '' : (firstSceneRef || (shotImgSrc ? String(shotImgSrc).trim() : ''));
+
+      if (pano360Src) {
+        const panoEntry = Object.values(state.nodes).find((n) => n && n.type === 'pano');
+        if (panoEntry && panoEntry.id) {
+          const nid = panoEntry.id;
+          let tries = 0;
+          const tryPanoTex = () => {
+            if (state.nodes[nid]?.panothree) {
+              loadPanoTextureForNode(nid, pano360Src);
+              return;
+            }
+            tries++;
+            if (tries < 12) setTimeout(tryPanoTex, tries < 4 ? 50 : 120);
+          };
+          requestAnimationFrame(() => {
+            requestAnimationFrame(tryPanoTex);
+          });
+        }
+      } else if (flatForSceneModule) {
+        const panoEntry = Object.values(state.nodes).find((n) => n && n.type === 'pano');
+        if (panoEntry && panoEntry.id) {
+          const cap = firstSceneRef
+            ? '编导带入：本行「主体参考」中的场景图（无 360° 全景）。已显示在下方「场景图」区域，并参与站位底图与资产生成参考。'
+            : '编导带入：本分镜成图（无全景与单独场景参考时）。已显示在下方「场景图」区域，并参与站位底图与资产生成参考。';
+          requestAnimationFrame(() => {
+            showPanoDirectorFlatScene(panoEntry.id, flatForSceneModule, cap);
+          });
+        }
+      } else {
+        const panoEntry = Object.values(state.nodes).find((n) => n && n.type === 'pano');
+        if (panoEntry?.id) {
+          const pn = state.nodes[panoEntry.id];
+          if (pn) delete pn.directorSceneFlatUrl;
+          if (!pn?.lastCaptureDataUrl) syncPanoSceneWrapVisibility(panoEntry.id);
+        }
+      }
+
+      refreshAllGrids();
+      mountDirectorShotBridge();
+    }
+
+    window.addEventListener('message', (ev) => {
+      if (ev.origin !== window.location.origin) return;
+      if (ev.data && ev.data.type === 'xunyu-director-canvas-init') {
+        window.__directorCanvasInitPayload = ev.data.payload || null;
+        applyDirectorShotHydration();
+      }
+    });
+
+    wireGlobalFileInputs();
+    initCanvas();
+    spawnDefaultCanvasLayout();
+    applyDirectorShotHydration();
+  </script>
+</body>
+</html>

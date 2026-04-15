@@ -1,0 +1,17 @@
+[Unit]
+Description=Xunyu AI (讯语AI-v1)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/xunyu
+ExecStart=/usr/bin/node /root/xunyu/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3000
+EnvironmentFile=/root/xunyu/.env
+
+[Install]
+WantedBy=multi-user.target

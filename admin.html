@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>讯语AI-v1 - 管理后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+    .gradient-text { background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .btn-primary { background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); transition: all 0.3s ease; }
+    .btn-primary:hover { transform: scale(1.05); box-shadow: 0 10px 30px rgba(168,85,247,0.4); }
+    .sidebar-item:hover { background: rgba(168,85,247,0.2); }
+    .sidebar-item.active { background: rgba(168,85,247,0.3); border-left: 3px solid #a855f7; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 15px 25px; border-radius: 8px; color: white; z-index: 2000; transform: translateX(400px); transition: transform 0.3s ease; }
+    .toast.show { transform: translateX(0); }
+    .toast.success { background: linear-gradient(135deg, #10b981, #059669); }
+    .toast.error { background: linear-gradient(135deg, #ef4444, #dc2626); }
+    .toast.info { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 5000; justify-content: center; align-items: center; }
+    .modal.active { display: flex; }
+    table tbody tr:hover { background: rgba(168,85,247,0.1); }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+
+<!-- 管理员登录页面 -->
+<div id="login-page" class="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+  <div class="glass p-8 rounded-2xl w-full max-w-md mx-4">
+    <div class="text-center mb-8">
+      <div class="text-3xl font-bold gradient-text mb-2">讯语AI-v1</div>
+      <div class="text-gray-400">管理后台</div>
+    </div>
+    <form id="login-form" onsubmit="handleAdminLogin(event)">
+      <div class="mb-4">
+        <label class="block text-sm text-gray-400 mb-2">管理员用户名</label>
+        <input type="text" id="admin-username" required class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+      </div>
+      <div class="mb-6">
+        <label class="block text-sm text-gray-400 mb-2">密码</label>
+        <input type="password" id="admin-password" required class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+      </div>
+      <button type="submit" class="w-full py-3 btn-primary rounded-lg font-semibold">登录</button>
+      <p id="login-error" class="text-red-400 text-sm mt-4 text-center hidden"></p>
+    </form>
+  </div>
+</div>
+
+<!-- 管理后台主界面 -->
+<div id="admin-page" class="hidden flex">
+  <aside class="w-64 min-h-screen bg-gray-800 p-4 fixed">
+    <div class="text-2xl font-bold gradient-text mb-2">讯语AI-v1</div>
+    <div class="text-sm text-gray-400 mb-4">管理后台</div>
+    <nav class="space-y-2">
+      <a href="#" onclick="showPage('dashboard')" class="sidebar-item active block px-4 py-3 rounded-lg text-gray-300">
+        <i class="fa fa-dashboard mr-3"></i>控制台
+      </a>
+      <a href="#" onclick="showPage('users')" class="sidebar-item block px-4 py-3 rounded-lg text-gray-300">
+        <i class="fa fa-users mr-3"></i>用户管理
+      </a>
+      <a href="#" onclick="showPage('records')" class="sidebar-item block px-4 py-3 rounded-lg text-gray-300">
+        <i class="fa fa-history mr-3"></i>消费记录
+      </a>
+      <a href="#" onclick="showPage('api')" class="sidebar-item block px-4 py-3 rounded-lg text-gray-300">
+        <i class="fa fa-cog mr-3"></i>API配置
+      </a>
+      <a href="#" onclick="showPage('settings')" class="sidebar-item block px-4 py-3 rounded-lg text-gray-300">
+        <i class="fa fa-lock mr-3"></i>账号设置
+      </a>
+      <a href="#" onclick="logout()" class="sidebar-item block px-4 py-3 rounded-lg text-red-400 hover:bg-red-600/20">
+        <i class="fa fa-sign-out mr-3"></i>退出登录
+      </a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 ml-64 p-8">
+    <div id="page-dashboard" class="page">
+      <h1 class="text-2xl font-bold mb-8">控制台</h1>
+      
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="glass p-6 rounded-xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-gray-400 text-sm">总用户数</div>
+              <div class="text-3xl font-bold mt-2" id="stat-users">0</div>
+            </div>
+            <div class="w-12 h-12 bg-purple-600/30 rounded-full flex items-center justify-center">
+              <i class="fa fa-users text-purple-400 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="glass p-6 rounded-xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-gray-400 text-sm">总积分消耗</div>
+              <div class="text-3xl font-bold mt-2" id="stat-credits">0</div>
+            </div>
+            <div class="w-12 h-12 bg-green-600/30 rounded-full flex items-center justify-center">
+              <i class="fa fa-diamond text-green-400 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="glass p-6 rounded-xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-gray-400 text-sm">今日新增用户</div>
+              <div class="text-3xl font-bold mt-2" id="stat-today-users">0</div>
+            </div>
+            <div class="w-12 h-12 bg-blue-600/30 rounded-full flex items-center justify-center">
+              <i class="fa fa-user-plus text-blue-400 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="glass p-6 rounded-xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-gray-400 text-sm">总消费记录</div>
+              <div class="text-3xl font-bold mt-2" id="stat-records">0</div>
+            </div>
+            <div class="w-12 h-12 bg-yellow-600/30 rounded-full flex items-center justify-center">
+              <i class="fa fa-file-text-o text-yellow-400 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass p-6 rounded-xl">
+        <h3 class="text-lg font-bold mb-4">最近消费记录</h3>
+        <div id="recent-records" class="space-y-2">
+          <div class="text-gray-400">加载中...</div>
+        </div>
+      </div>
+
+      <div class="glass p-6 rounded-xl mt-6 border border-orange-500/25">
+        <h3 class="text-lg font-bold mb-2"><i class="fa fa-folder-open mr-2 text-orange-400"></i>图片 / 视频本地上传缓存</h3>
+        <p class="text-xs text-gray-500 mb-4 leading-relaxed">
+          目录 <code class="text-gray-400 font-mono">uploads/</code>：用户上传的参考图与视频、落盘保存的生成图等。按下方<strong class="text-gray-300">保留时长</strong>与<strong class="text-gray-300">扫描间隔</strong>自动删除过期文件；保存后立即按新规格调度。
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">保留时长（小时）</label>
+            <input type="number" id="upload-cache-retention-hours" min="0" max="720" step="1" value="8" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-orange-500 focus:outline-none text-sm" title="0 表示关闭自动清理；最长 720 小时（30 天）">
+            <p class="text-[11px] text-gray-600 mt-1">超过此时长（按文件修改时间）删除。填 <strong class="text-gray-400">0</strong> 关闭自动清理。</p>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">扫描间隔（分钟）</label>
+            <input type="number" id="upload-cache-interval-minutes" min="1" max="1440" step="1" value="30" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-orange-500 focus:outline-none text-sm" title="每隔多久扫描一次 uploads">
+            <p class="text-[11px] text-gray-600 mt-1">范围 1～1440（24 小时）。</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-4">
+          <button type="button" onclick="saveUploadCacheSettingsPanel()" class="px-4 py-2 rounded-lg bg-orange-900/40 border border-orange-500/35 text-orange-100 hover:bg-orange-900/60 text-sm transition-colors">
+            <i class="fa fa-save mr-2"></i>保存清理规格
+          </button>
+        </div>
+        <div class="border-t border-gray-700/80 pt-4 mt-2">
+          <p class="text-xs text-gray-500 mb-3">手动清空（忽略保留时长，删除当前目录下<strong class="text-gray-300">全部</strong>文件）。<strong class="text-amber-200">不可恢复</strong>。</p>
+          <button type="button" onclick="clearUploadsCache()" class="px-4 py-2 rounded-lg bg-red-900/40 border border-red-500/35 text-red-100 hover:bg-red-900/60 text-sm transition-colors">
+            <i class="fa fa-trash mr-2"></i>立即清空 uploads
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-users" class="page hidden">
+      <div class="flex justify-between items-center mb-8">
+        <h1 class="text-2xl font-bold">用户管理</h1>
+        <button onclick="refreshUsers()" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
+          <i class="fa fa-refresh mr-2"></i>刷新
+        </button>
+      </div>
+      
+      <div class="glass p-4 rounded-xl mb-6">
+        <input type="text" id="search-keyword" placeholder="搜索用户名..." class="flex-1 px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none" onkeyup="searchUsers()">
+      </div>
+      
+      <div class="glass rounded-xl overflow-hidden">
+        <table class="w-full">
+          <thead class="bg-gray-800">
+            <tr>
+              <th class="px-6 py-4 text-left text-sm font-semibold">ID</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">姓名</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">手机号</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">用户名</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">积分余额</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">注册时间</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">操作</th>
+            </tr>
+          </thead>
+          <tbody id="users-table" class="divide-y divide-gray-700">
+            <tr><td colspan="5" class="px-6 py-4 text-center text-gray-400">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="page-records" class="page hidden">
+      <h1 class="text-2xl font-bold mb-8">消费记录</h1>
+      
+      <div class="glass rounded-xl overflow-hidden">
+        <table class="w-full">
+          <thead class="bg-gray-800">
+            <tr>
+              <th class="px-6 py-4 text-left text-sm font-semibold">ID</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">用户</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">消费类型</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">消耗积分</th>
+              <th class="px-6 py-4 text-left text-sm font-semibold">时间</th>
+            </tr>
+          </thead>
+          <tbody id="records-table" class="divide-y divide-gray-700">
+            <tr><td colspan="5" class="px-6 py-4 text-center text-gray-400">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="page-api" class="page hidden">
+      <h1 class="text-2xl font-bold mb-8">API配置</h1>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="glass p-6 rounded-xl">
+          <h3 class="text-lg font-bold mb-4"><i class="fa fa-brain mr-2 text-purple-400"></i>AI大模型配置</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Provider</label>
+              <select id="api-llm-provider" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none" onchange="onProviderChange()">
+                <option value="openai-compatible">自定义OpenAI兼容接口</option>
+                <option value="qwen">通义千问 (阿里云)</option>
+                <option value="openai">OpenAI GPT</option>
+                <option value="zhipu">智谱GLM</option>
+                <option value="doubao">豆包 (字节)</option>
+                <option value="deepseek">DeepSeek（官方 OpenAI 兼容）</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">模型</label>
+              <select id="api-llm-model" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                <option value="astron-code-latest">Astron Code (自定义模型)</option>
+                <option value="qwen-turbo">通义千问 Turbo</option>
+                <option value="qwen-plus">通义千问 Plus</option>
+                <option value="qwen-max">通义千问 Max</option>
+                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="glm-4">GLM-4</option>
+                <option value="doubao-pro">豆包 Pro</option>
+                <option value="deepseek-chat">deepseek-chat</option>
+                <option value="deepseek-reasoner">deepseek-reasoner</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Key</label>
+              <input type="password" id="api-llm-key" placeholder="输入API Key" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">Endpoint (可选)</label>
+              <input type="text" id="api-llm-endpoint" placeholder="自定义API地址" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+            </div>
+            <div class="border-t border-gray-700 pt-4 space-y-4">
+              <p class="text-xs text-gray-400 leading-relaxed">
+                <strong class="text-cyan-300/90">2 号备用大模型</strong>：主模型调用<strong class="text-gray-200">崩溃、超时、限流或 5xx</strong>时，站内会<strong class="text-gray-200">自动改用此处配置</strong>再请求一次（剧本/分镜/编导流式等走同一套逻辑）。推荐填
+                DeepSeek；若<strong class="text-amber-200/90">不填 2 号 Key</strong>则仅使用上方主模型。
+              </p>
+              <div>
+                <label class="block text-sm text-gray-400 mb-2">2 号 · API Provider</label>
+                <select id="api-llm2-provider" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none" onchange="onLlm2ProviderChange()">
+                  <option value="deepseek">DeepSeek（官方）</option>
+                  <option value="openai-compatible">自定义 OpenAI 兼容接口</option>
+                  <option value="qwen">通义千问 (阿里云)</option>
+                  <option value="openai">OpenAI GPT</option>
+                  <option value="zhipu">智谱GLM</option>
+                  <option value="doubao">豆包 (字节)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-2">2 号 · 模型</label>
+                <select id="api-llm2-model" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                  <option value="deepseek-chat">deepseek-chat</option>
+                  <option value="deepseek-reasoner">deepseek-reasoner</option>
+                  <option value="astron-code-latest">Astron Code (自定义)</option>
+                  <option value="qwen-turbo">通义千问 Turbo</option>
+                  <option value="qwen-plus">通义千问 Plus</option>
+                  <option value="qwen-max">通义千问 Max</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="glm-4">GLM-4</option>
+                  <option value="doubao-pro">豆包 Pro</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-2">2 号 · API Key</label>
+                <input type="password" id="api-llm2-key" placeholder="备用 Key（可填 DeepSeek sk-…）" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-2">2 号 · Endpoint (可选)</label>
+                <input type="text" id="api-llm2-endpoint" placeholder="留空则按 Provider 默认地址" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+              </div>
+            </div>
+            <button onclick="saveLlmConfig()" class="w-full py-2 btn-primary rounded-lg">保存大模型配置（主 + 2 号备用）</button>
+          </div>
+        </div>
+
+        <div class="glass p-6 rounded-xl">
+          <h3 class="text-lg font-bold mb-4"><i class="fa fa-image mr-2 text-purple-400"></i>图片生成API</h3>
+          <p class="text-sm text-gray-400 mb-3">在「API Provider」下拉框中选择 <strong class="text-gray-200">Nano Banana（OpenAI 兼容）</strong> 或 <strong class="text-gray-200">Nano Banana（Gemini 原生）</strong> 后，会展开 Base URL、模型等配置项。</p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Provider</label>
+              <select id="api-image-provider" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none" onchange="onImageProviderChange()">
+                <option value="mock">模拟模式（测试用）</option>
+                <option value="nano_banana_openai">Nano Banana（OpenAI 兼容 /chat/completions）</option>
+                <option value="nano_banana_gemini">Nano Banana（Gemini 原生 generateContent）</option>
+                <option value="openai">OpenAI DALL-E（未对接）</option>
+                <option value="stability">Stability AI（未对接）</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Key</label>
+              <input type="password" id="api-image-key" placeholder="Bearer Token（平台发放的 API Key）" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+            </div>
+            <div id="api-image-nano-wrap" class="hidden space-y-4 border-t border-gray-700 pt-4 mt-2">
+              <div>
+                <label class="block text-sm text-gray-400 mb-2">平台 Base URL</label>
+                <input type="text" id="api-image-base-url" placeholder="https://banana.aigenmedia.art" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+              </div>
+              <div id="api-image-openai-extra" class="hidden space-y-4">
+                <div>
+                  <label class="block text-sm text-gray-400 mb-2">固定模型 ID（可选）</label>
+                  <input type="text" id="api-image-model" placeholder="留空则按默认比例+分辨率自动选择，如 gemini-3.0-pro-image-square" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-sm text-gray-400 mb-2">默认比例</label>
+                    <select id="api-image-default-aspect" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                      <option value="1:1">1:1</option>
+                      <option value="16:9">16:9</option>
+                      <option value="9:16">9:16</option>
+                      <option value="4:3">4:3</option>
+                      <option value="3:4">3:4</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm text-gray-400 mb-2">默认分辨率</label>
+                    <select id="api-image-default-resolution" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                      <option value="1K">1K</option>
+                      <option value="2K">2K</option>
+                      <option value="4K">4K</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div id="api-image-gemini-extra" class="hidden space-y-4">
+                <div>
+                  <label class="block text-sm text-gray-400 mb-2">Gemini 模型 ID</label>
+                  <select id="api-image-gemini-model" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                    <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview（Nano Banana Pro）</option>
+                    <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview（Nano Banana 2）</option>
+                  </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-sm text-gray-400 mb-2">imageConfig 比例</label>
+                    <select id="api-image-gemini-aspect" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                      <option value="1:1">1:1</option>
+                      <option value="16:9">16:9</option>
+                      <option value="9:16">9:16</option>
+                      <option value="4:3">4:3</option>
+                      <option value="3:4">3:4</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm text-gray-400 mb-2">imageConfig 分辨率</label>
+                    <select id="api-image-gemini-size" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                      <option value="1K">1K</option>
+                      <option value="2K">2K</option>
+                      <option value="4K">4K</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button onclick="saveApiConfig('image')" class="w-full py-2 btn-primary rounded-lg">保存配置</button>
+            <div class="mt-4 p-4 bg-gray-900/90 rounded-lg border border-gray-600 text-xs text-gray-300 leading-relaxed">
+              <div class="font-semibold text-gray-100 mb-2"><i class="fa fa-link mr-1 text-purple-400"></i>本系统已实现的路由（相对当前站点根路径）</div>
+              <ul class="list-disc pl-4 space-y-2 font-mono text-[11px] break-all">
+                <li><span class="text-green-400">POST</span> <code class="text-amber-200">/api/generate/image</code> — 用户出图（需前台登录 Cookie）。<code class="text-gray-400">prompt</code> 必填；多参考图传 <code class="text-gray-400">reference_urls</code>（HTTPS URL 数组，与官方 Gemini <code class="text-gray-400">parts</code> 中多个 <code class="text-gray-400">imageUrl</code> 一致，<strong class="text-amber-200/90">最多 5 张</strong>，超出自动截断）；亦可 <code class="text-gray-400">reference_url</code> / <code class="text-gray-400">image_url</code> 单张；另有 <code class="text-gray-400">aspect_ratio</code>、<code class="text-gray-400">resolution</code>、<code class="text-gray-400">gemini_model</code> 等。</li>
+                <li><span class="text-green-400">GET</span> <code class="text-amber-200">/api/admin/nano-banana/usage</code> — 代理 Nano Banana 用量查询（需管理员登录）。Query：<code class="text-gray-400">days</code>、<code class="text-gray-400">limit</code>，例如 <code class="text-gray-400">?days=7&amp;limit=50</code>。</li>
+              </ul>
+              <div class="font-semibold text-gray-100 mt-3 mb-2">上游 Nano Banana（由上方 Base URL 拼接，默认 <code class="text-amber-200">https://banana.aigenmedia.art</code>）</div>
+              <ul class="list-disc pl-4 space-y-1 font-mono text-[11px] break-all text-gray-400">
+                <li>OpenAI 兼容：<code>POST {base}/api/v1/chat/completions</code></li>
+                <li>Gemini 原生：<code>POST {base}/api/gemini/v1beta/models/{model}:generateContent</code></li>
+                <li>用量：<code>GET {base}/api/usage</code></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass p-6 rounded-xl">
+          <h3 class="text-lg font-bold mb-4"><i class="fa fa-video-camera mr-2 text-purple-400"></i>视频生成API</h3>
+          <p class="text-xs text-gray-500 mb-3">对接 <a href="https://docs.platform.pai.video/" target="_blank" rel="noopener noreferrer" class="text-purple-400 hover:underline">拍我AI 开放平台</a>（PixVerse OpenAPI v2）。流程说明见 <a href="https://docs.platform.pai.video/6740005m0" target="_blank" rel="noopener noreferrer" class="text-purple-400 hover:underline">API 工作流程</a>。请求头 <code class="text-gray-500">API-KEY</code>、<code class="text-gray-500">Ai-trace-id</code>（本站每次请求自动生成）；图生视频需<strong class="text-gray-300">公网 HTTPS</strong> 可访问的参考图 URL（本站上传请配 <code class="text-gray-500">PUBLIC_SITE_URL</code>）。<strong class="text-gray-300">图生视频</strong>在本站按下方「图生视频 quality」<strong class="text-gray-300">单次</strong>提交（如 1080p），不再做预览与二次超清两步。</p>
+          <p class="text-xs text-amber-200/90 mb-3 rounded-lg border border-amber-500/25 bg-amber-950/35 px-3 py-2 leading-relaxed"><strong class="text-amber-100">要「成片里自带声音」？</strong> 这是<strong class="text-amber-100">拍我在出片时一起合成</strong>的对白/环境音，写进返回的 MP4，<strong class="text-amber-100">不需要您上传任何音频文件</strong>。请在下方勾选「生成视频自带声音」并保存；依赖接口字段 <code class="text-amber-100/90">sound_effect_switch</code> 等。<strong class="text-amber-100">model c1</strong> 与 <strong class="text-amber-100">v6（及 v6.*）</strong>当前网关<strong class="text-amber-100">不支持</strong>该字段，本站请求中<strong class="text-amber-100">不会附带</strong>；v3.5 / v5 等以实际接口为准。</p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Provider</label>
+              <select id="api-video-provider" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none" onchange="onVideoProviderChange()">
+                <option value="mock">模拟模式（测试用）</option>
+                <option value="paiwo">拍我AI（PixVerse）</option>
+              </select>
+            </div>
+            <div id="api-video-paiwo-wrap" class="hidden space-y-4 border-t border-gray-700 pt-4">
+              <div>
+                <label class="block text-sm text-gray-400 mb-2">API Base（无尾斜杠）</label>
+                <input type="text" id="api-video-base-url" placeholder="https://app-api.pixverseai.cn" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm font-mono">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-sm text-gray-400 mb-2">模型 model（如 <strong class="text-gray-300">c1</strong>；<strong class="text-gray-300">c1</strong> 与 v6.* 请勿依赖「自带声音」接口字段）</label>
+                  <input type="text" id="api-video-model" list="paiwo-video-model-list" placeholder="c1" autocomplete="off" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm font-mono">
+                  <datalist id="paiwo-video-model-list">
+                    <option value="c1"></option>
+                    <option value="v5.6"></option>
+                    <option value="v3.5"></option>
+                    <option value="v6"></option>
+                  </datalist>
+                </div>
+                <div>
+                  <label class="block text-sm text-gray-400 mb-2">文生视频 quality</label>
+                  <select id="api-video-quality" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                    <option value="360p">360p</option>
+                    <option value="540p">540p</option>
+                    <option value="720p">720p</option>
+                    <option value="1080p">1080p</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-2">图生视频 quality（单次生成，如 1080p）</label>
+                <select id="api-video-img2vid-final-quality" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                  <option value="360p">360p</option>
+                  <option value="540p">540p</option>
+                  <option value="720p">720p</option>
+                  <option value="1080p">1080p</option>
+                </select>
+                <p class="mt-1 text-[11px] text-gray-500 leading-snug">超级编导等图生视频一次请求即使用该档位，不再区分「预览 / 二次超清」。</p>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-sm text-gray-400 mb-2">画幅 aspect_ratio</label>
+                  <select id="api-video-aspect" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                    <option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option>
+                    <option value="1:1">1:1</option>
+                    <option value="4:3">4:3</option>
+                    <option value="3:4">3:4</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm text-gray-400 mb-2">运动 motion_mode</label>
+                  <select id="api-video-motion" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                    <option value="normal">normal（C1 / v5 / v6 等请用此项）</option>
+                    <option value="fast">fast（仅拍我官方 v3.5、v4、v4.5）</option>
+                  </select>
+                  <p class="mt-1 text-[11px] leading-snug text-amber-200/90">若接口提示 <code class="text-amber-100/90">motion_mode:fast is only supported for models v3.5, v4, and v4.5</code>：请选 <strong>normal</strong>，模型用 <strong>c1</strong>（C1）。本站请求时会自动把不兼容组合降为 normal。</p>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                  <label class="block text-sm text-gray-400 mb-2">负向提示 negative_prompt（可选）</label>
+                  <input type="text" id="api-video-negative-prompt" placeholder="留空则不传" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                </div>
+                <div>
+                  <label class="block text-sm text-gray-400 mb-2">随机种子 seed（可选，整数）</label>
+                  <input type="number" id="api-video-seed" placeholder="留空由上游随机" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm font-mono">
+                </div>
+                <div class="flex items-end pb-2">
+                  <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+                    <input type="checkbox" id="api-video-watermark" class="rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500">
+                    生成视频带平台水印（water_mark）
+                  </label>
+                </div>
+                <div class="sm:col-span-2 space-y-2 border-t border-gray-700 pt-3">
+                  <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+                    <input type="checkbox" id="api-video-sound-switch" class="rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500">
+                    生成视频自带声音（拍我合成进成片，无需上传音频）
+                  </label>
+                  <p class="text-[11px] leading-snug text-gray-500">勾选后请求里会带 <code class="text-gray-400">sound_effect_switch: true</code>，让上游在<strong class="text-gray-400">生成 MP4 时写入音轨</strong>（对白/环境音等），不是让您上传 wav/mp3。<strong class="text-gray-400">model c1</strong> 与 <strong class="text-gray-400">v6（及 v6.*）</strong>本站<strong class="text-gray-400">不会附带</strong>该字段；其它模型以接口为准。下方「声音描述」仅为<strong class="text-gray-400">文字提示</strong>。新建默认<strong class="text-gray-400">不勾选</strong>（与 c1 默认搭配）。</p>
+                  <input type="text" id="api-video-sound-content" placeholder="声音文字描述（可选，非上传文件；留空则拍我随机生成）" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                </div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Key（控制台创建，请求头 API-KEY）</label>
+              <input type="password" id="api-video-key" placeholder="拍我开放平台 API Key" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+            </div>
+            <button onclick="saveApiConfig('video')" class="w-full py-2 btn-primary rounded-lg">保存配置</button>
+          </div>
+        </div>
+
+        <div id="qwen-video-analyze-config" class="glass p-6 rounded-xl scroll-mt-24">
+          <h3 class="text-lg font-bold mb-4"><i class="fa fa-search mr-2 text-purple-400"></i>视频反推</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Provider</label>
+              <select id="api-analyze-provider" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+                <option value="dashscope">DashScope 兼容模式</option>
+                <option value="mock">模拟模式（测试用）</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">地域</label>
+              <select id="api-analyze-region" onchange="onAnalyzeRegionChange()" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm">
+                <option value="cn">中国内地（北京）</option>
+                <option value="us">美国（弗吉尼亚）</option>
+                <option value="intl">国际（新加坡）</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">Base URL</label>
+              <input type="text" id="api-analyze-openai-url" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm font-mono">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">完整 API URL（可选）</label>
+              <input type="text" id="api-analyze-endpoint" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm font-mono">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">模型</label>
+              <input type="text" id="api-analyze-model" placeholder="qwen3-vl-plus" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none text-sm font-mono">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">API Key</label>
+              <input type="password" id="api-analyze-key" placeholder="sk-…" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+            </div>
+            <button onclick="saveApiConfig('analyze')" class="w-full py-2 btn-primary rounded-lg">保存配置</button>
+          </div>
+        </div>
+
+        <div class="glass p-6 rounded-xl">
+          <h3 class="text-lg font-bold mb-4"><i class="fa fa-heartbeat mr-2 text-green-400"></i>服务状态</h3>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+              <span>后端服务</span>
+              <span id="status-backend" class="text-green-400"><i class="fa fa-check-circle"></i> 在线</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+              <span>AI大模型（主）</span>
+              <span id="status-llm-api" class="text-yellow-400"><i class="fa fa-question-circle"></i> 未配置</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+              <span>2号备用大模型</span>
+              <span id="status-llm2-api" class="text-yellow-400"><i class="fa fa-question-circle"></i> 未配置</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+              <span>图片API</span>
+              <span id="status-image-api" class="text-yellow-400"><i class="fa fa-question-circle"></i> 未配置</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+              <span>视频API</span>
+              <span id="status-video-api" class="text-yellow-400"><i class="fa fa-question-circle"></i> 未配置</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+              <span>视频反推</span>
+              <span id="status-analyze-api" class="text-yellow-400"><i class="fa fa-question-circle"></i> 未配置</span>
+            </div>
+            <button onclick="checkServiceStatus()" class="w-full py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
+              <i class="fa fa-refresh mr-2"></i>刷新状态
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-settings" class="page hidden">
+      <h1 class="text-2xl font-bold mb-8">账号设置</h1>
+      
+      <div class="glass p-6 rounded-xl max-w-lg">
+        <h3 class="text-lg font-bold mb-4"><i class="fa fa-lock mr-2"></i>修改管理员密码</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">当前密码</label>
+            <input type="password" id="current-password" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">新密码</label>
+            <input type="password" id="new-password" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">确认新密码</label>
+            <input type="password" id="confirm-password" class="w-full px-4 py-2 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+          </div>
+          <button onclick="changePassword()" class="w-full py-2 btn-primary rounded-lg">修改密码</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="recharge-modal" class="modal">
+  <div class="glass p-8 rounded-2xl w-full max-w-md mx-4">
+    <div class="flex justify-between items-center mb-6">
+      <h3 class="text-xl font-bold">为用户充值</h3>
+      <button onclick="closeRechargeModal()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+    </div>
+    <div class="mb-4">
+      <div class="text-sm text-gray-400 mb-2">用户名</div>
+      <div id="recharge-username" class="text-lg font-semibold text-purple-400"></div>
+    </div>
+    <div class="mb-6">
+      <label class="block text-sm text-gray-400 mb-2">充值积分</label>
+      <input type="number" id="recharge-amount" min="1" value="100" class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+    </div>
+    <input type="hidden" id="recharge-user-id">
+    <div class="flex gap-4">
+      <button onclick="closeRechargeModal()" class="flex-1 py-3 bg-gray-700 rounded-lg hover:bg-gray-600">取消</button>
+      <button onclick="doRecharge()" class="flex-1 py-3 btn-primary rounded-lg">确认充值</button>
+    </div>
+  </div>
+</div>
+
+<div id="edit-modal" class="modal">
+  <div class="glass p-8 rounded-2xl w-full max-w-md mx-4">
+    <div class="flex justify-between items-center mb-6">
+      <h3 class="text-xl font-bold">编辑用户</h3>
+      <button onclick="closeEditModal()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm text-gray-400 mb-2">用户名</label>
+      <input type="text" id="edit-username" disabled class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 text-gray-500">
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm text-gray-400 mb-2">姓名</label>
+      <input type="text" id="edit-name" class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm text-gray-400 mb-2">手机号</label>
+      <input type="text" id="edit-phone" class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+    </div>
+    <div class="mb-6">
+      <label class="block text-sm text-gray-400 mb-2">积分余额</label>
+      <input type="number" id="edit-balance" min="0" class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-purple-500 focus:outline-none">
+    </div>
+    <input type="hidden" id="edit-user-id">
+    <div class="flex gap-4">
+      <button onclick="closeEditModal()" class="flex-1 py-3 bg-gray-700 rounded-lg hover:bg-gray-600">取消</button>
+      <button onclick="doEditUser()" class="flex-1 py-3 btn-primary rounded-lg">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const API_BASE = '/api';
+let allUsers = [];
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+const ANALYZE_REGION_BASE = {
+  cn: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  us: 'https://dashscope-us.aliyuncs.com/compatible-mode/v1',
+  intl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+};
+
+function onAnalyzeRegionChange() {
+  const reg = document.getElementById('api-analyze-region');
+  const ou = document.getElementById('api-analyze-openai-url');
+  if (!reg || !ou) return;
+  const b = ANALYZE_REGION_BASE[reg.value];
+  if (b) ou.value = b;
+}
+
+function onProviderChange() {
+  const p = document.getElementById('api-llm-provider')?.value;
+  const el = document.getElementById('api-llm-endpoint');
+  if (!p || !el) return;
+  const cur = el.value.trim();
+  if (cur) return;
+  const defaults = {
+    'openai-compatible': 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/v1/chat/completions',
+    qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    openai: 'https://api.openai.com/v1',
+    zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+    doubao: 'https://ark.cn-beijing.volces.com/api/v3',
+    deepseek: 'https://api.deepseek.com/v1',
+  };
+  const d = defaults[p];
+  if (d) el.value = d;
+}
+
+function onLlm2ProviderChange() {
+  const p = document.getElementById('api-llm2-provider')?.value;
+  const el = document.getElementById('api-llm2-endpoint');
+  if (!p || !el) return;
+  const cur = el.value.trim();
+  if (cur) return;
+  const defaults = {
+    deepseek: 'https://api.deepseek.com/v1',
+    'openai-compatible': 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/v1/chat/completions',
+    qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    openai: 'https://api.openai.com/v1',
+    zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+    doubao: 'https://ark.cn-beijing.volces.com/api/v3',
+  };
+  const d = defaults[p];
+  if (d) el.value = d;
+}
+
+function onVideoProviderChange() {
+  const sel = document.getElementById('api-video-provider');
+  const wrap = document.getElementById('api-video-paiwo-wrap');
+  if (!sel || !wrap) return;
+  wrap.classList.toggle('hidden', sel.value !== 'paiwo');
+}
+
+function onImageProviderChange() {
+  const sel = document.getElementById('api-image-provider');
+  if (!sel) return;
+  const v = sel.value;
+  const nano = v === 'nano_banana_openai' || v === 'nano_banana_gemini';
+  const wrap = document.getElementById('api-image-nano-wrap');
+  if (wrap) wrap.classList.toggle('hidden', !nano);
+  const oe = document.getElementById('api-image-openai-extra');
+  if (oe) oe.classList.toggle('hidden', v !== 'nano_banana_openai');
+  const ge = document.getElementById('api-image-gemini-extra');
+  if (ge) ge.classList.toggle('hidden', v !== 'nano_banana_gemini');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  checkLoginStatus();
+});
+
+async function checkLoginStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/admin/check`, { credentials: 'include' });
+    const data = await response.json();
+    if (data.data.logged_in) {
+      showAdminPage();
+    } else {
+      showLoginPage();
+    }
+  } catch (e) {
+    showLoginPage();
+  }
+}
+
+function showLoginPage() {
+  document.getElementById('login-page').classList.remove('hidden');
+  document.getElementById('admin-page').classList.add('hidden');
+}
+
+function showAdminPage() {
+  document.getElementById('login-page').classList.add('hidden');
+  document.getElementById('admin-page').classList.remove('hidden');
+  loadApiConfig();
+  checkServiceStatus();
+  showPage('dashboard', null);
+}
+
+async function handleAdminLogin(e) {
+  e.preventDefault();
+  const username = document.getElementById('admin-username').value;
+  const password = document.getElementById('admin-password').value;
+  
+  try {
+    const response = await fetch(`${API_BASE}/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ username, password })
+    });
+    const data = await response.json();
+    if (data.code === 200) {
+      showToast('登录成功', 'success');
+      showAdminPage();
+    } else {
+      document.getElementById('login-error').textContent = data.msg;
+      document.getElementById('login-error').classList.remove('hidden');
+    }
+  } catch (error) {
+    showToast('登录失败: ' + error.message, 'error');
+  }
+}
+
+async function loadUploadCacheSettings() {
+  const rh = document.getElementById('upload-cache-retention-hours');
+  const im = document.getElementById('upload-cache-interval-minutes');
+  if (!rh || !im) return;
+  try {
+    const response = await fetch(`${API_BASE}/admin/upload-cache-settings`, { credentials: 'include' });
+    const data = await response.json();
+    if (response.status === 401 || data.code === 401) {
+      showLoginPage();
+      return;
+    }
+    if (data.code === 200 && data.data) {
+      rh.value = String(data.data.retentionHours != null ? data.data.retentionHours : 8);
+      im.value = String(data.data.intervalMinutes != null ? data.data.intervalMinutes : 30);
+    }
+  } catch (e) {}
+}
+
+async function saveUploadCacheSettingsPanel() {
+  const rh = document.getElementById('upload-cache-retention-hours');
+  const im = document.getElementById('upload-cache-interval-minutes');
+  if (!rh || !im) return;
+  const retentionHours = Number(rh.value);
+  const intervalMinutes = Number(im.value);
+  if (!Number.isFinite(retentionHours) || retentionHours < 0 || retentionHours > 720) {
+    showToast('保留时长须为 0～720 的数字', 'error');
+    return;
+  }
+  if (!Number.isFinite(intervalMinutes) || intervalMinutes < 1 || intervalMinutes > 1440) {
+    showToast('扫描间隔须为 1～1440 的整数（分钟）', 'error');
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/admin/upload-cache-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ retentionHours, intervalMinutes }),
+    });
+    const data = await response.json();
+    if (data.code === 200) {
+      showToast('清理规格已保存并已应用调度', 'success');
+      if (data.data) {
+        rh.value = String(data.data.retentionHours);
+        im.value = String(data.data.intervalMinutes);
+      }
+    } else {
+      showToast(data.msg || '保存失败', 'error');
+    }
+  } catch (e) {
+    showToast('网络错误', 'error');
+  }
+}
+
+async function clearUploadsCache() {
+  if (!confirm('确定删除服务器 uploads/ 下全部缓存文件？不可恢复。')) return;
+  try {
+    const response = await fetch(`${API_BASE}/admin/uploads/clear`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: '{}',
+    });
+    const data = await response.json();
+    if (data.code === 200) {
+      const r = data.data && data.data.removed != null ? data.data.removed : 0;
+      const f = data.data && data.data.failed != null ? data.data.failed : 0;
+      showToast('已删除 ' + r + ' 个文件' + (f ? '（' + f + ' 个失败）' : ''), f ? 'error' : 'success');
+    } else {
+      showToast(data.msg || '清空失败', 'error');
+    }
+  } catch (e) {
+    showToast('网络错误', 'error');
+  }
+}
+
+async function logout() {
+  try {
+    await fetch(`${API_BASE}/admin/logout`, { method: 'POST', credentials: 'include' });
+  } catch (e) {}
+  showLoginPage();
+  showToast('已退出登录', 'info');
+}
+
+function showPage(page, evt) {
+  document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+  document.getElementById(`page-${page}`).classList.remove('hidden');
+  if (evt && evt.target) {
+    document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+    evt.target.closest('.sidebar-item').classList.add('active');
+  }
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'users') loadUsers();
+  if (page === 'records') loadRecords();
+  if (page === 'api') {
+    loadApiConfig();
+    const scrollQwenAnalyze = () => {
+      const h = (window.location.hash || '').replace(/^#/, '');
+      if (h !== 'qwen-video-analyze-config') return;
+      const el = document.getElementById('qwen-video-analyze-config');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scrollQwenAnalyze));
+  }
+}
+
+async function loadDashboard() {
+  loadUploadCacheSettings();
+  try {
+    const response = await fetch(`${API_BASE}/admin/stats`, { credentials: 'include' });
+    const data = await response.json();
+    if (response.status === 401 || data.code === 401) {
+      showLoginPage();
+      return;
+    }
+    if (data.code === 200) {
+      document.getElementById('stat-users').textContent = data.data.total_users;
+      document.getElementById('stat-credits').textContent = data.data.total_credits;
+      document.getElementById('stat-today-users').textContent = data.data.today_users;
+      document.getElementById('stat-records').textContent = data.data.total_records;
+      
+      const recordsHtml = data.data.recent_records.map(r => `
+        <div class="flex justify-between items-center p-3 bg-gray-800 rounded-lg">
+          <span class="text-gray-300">${escapeHtml(r.username)}</span>
+          <span class="text-purple-400">${escapeHtml(r.type)}</span>
+          <span class="${r.cost < 0 ? 'text-green-400' : 'text-red-400'}">${r.cost < 0 ? '+' : '-'}${Math.abs(r.cost)}积分</span>
+          <span class="text-gray-500 text-sm">${escapeHtml(r.created_at)}</span>
+        </div>
+      `).join('');
+      document.getElementById('recent-records').innerHTML = recordsHtml || '<div class="text-gray-400">暂无记录</div>';
+    }
+  } catch (error) {
+    showToast('请先登录', 'error');
+    showLoginPage();
+  }
+}
+
+async function loadUsers() {
+  try {
+    const response = await fetch(`${API_BASE}/admin/users`, { credentials: 'include' });
+    const data = await response.json();
+    if (response.status === 401 || data.code === 401) {
+      showLoginPage();
+      return;
+    }
+    if (data.code === 200) {
+      allUsers = data.data;
+      renderUsers(allUsers);
+    }
+  } catch (error) {
+    showLoginPage();
+  }
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('users-table');
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-400">暂无用户</td></tr>';
+    return;
+  }
+  
+  const html = users.map(user => `
+    <tr>
+      <td class="px-6 py-4 text-sm">${user.id}</td>
+      <td class="px-6 py-4 text-sm">${escapeHtml(user.name || '-')}</td>
+      <td class="px-6 py-4 text-sm">${escapeHtml(user.phone || '-')}</td>
+      <td class="px-6 py-4 text-sm font-semibold">${escapeHtml(user.username)}</td>
+      <td class="px-6 py-4 text-sm text-purple-400">${user.balance} 积分</td>
+      <td class="px-6 py-4 text-sm text-gray-400">${escapeHtml(user.created_at)}</td>
+      <td class="px-6 py-4 text-sm">
+        <button type="button" onclick="openEditModalById(${user.id})" class="px-3 py-1 bg-blue-600/30 text-blue-400 rounded hover:bg-blue-600/50 mr-2">
+          <i class="fa fa-edit"></i> 编辑
+        </button>
+        <button type="button" onclick="openRechargeModalById(${user.id})" class="px-3 py-1 bg-green-600/30 text-green-400 rounded hover:bg-green-600/50 mr-2">
+          <i class="fa fa-diamond"></i> 充值
+        </button>
+        <button type="button" onclick="deleteUser(${user.id})" class="px-3 py-1 bg-red-600/30 text-red-400 rounded hover:bg-red-600/50">
+          <i class="fa fa-trash"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+  tbody.innerHTML = html;
+}
+
+function searchUsers() {
+  const keyword = document.getElementById('search-keyword').value.toLowerCase();
+  const filtered = allUsers.filter(u => 
+    u.username.toLowerCase().includes(keyword) || 
+    (u.name && u.name.toLowerCase().includes(keyword)) ||
+    (u.phone && u.phone.includes(keyword))
+  );
+  renderUsers(filtered);
+}
+
+function refreshUsers() { loadUsers(); showToast('刷新成功', 'success'); }
+
+/** 避免在 onclick 中拼接 JSON 字符串破坏 HTML（姓名/手机含引号时按钮会失效） */
+function openEditModalById(userId) {
+  const u = allUsers.find(function (x) {
+    return Number(x.id) === Number(userId);
+  });
+  if (!u) {
+    showToast('未找到用户，请先刷新列表', 'error');
+    return;
+  }
+  openEditModal(u.id, u.username, u.name || '', u.phone || '', u.balance);
+}
+
+function openRechargeModalById(userId) {
+  const u = allUsers.find(function (x) {
+    return Number(x.id) === Number(userId);
+  });
+  if (!u) {
+    showToast('未找到用户，请先刷新列表', 'error');
+    return;
+  }
+  openRechargeModal(u.id, u.username, u.balance);
+}
+
+function openRechargeModal(userId, username, currentBalance) {
+  document.getElementById('recharge-user-id').value = userId;
+  document.getElementById('recharge-username').textContent = username;
+  document.getElementById('recharge-modal').classList.add('active');
+}
+
+function closeRechargeModal() { document.getElementById('recharge-modal').classList.remove('active'); }
+
+async function doRecharge() {
+  const userId = document.getElementById('recharge-user-id').value;
+  const amount = parseInt(document.getElementById('recharge-amount').value);
+  if (amount <= 0) { showToast('请输入正确的充值金额', 'error'); return; }
+  
+  try {
+    const response = await fetch(`${API_BASE}/admin/recharge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ user_id: userId, amount: amount })
+    });
+    const data = await response.json();
+    if (data.code === 200) {
+      showToast(`充值成功！+${amount}积分`, 'success');
+      closeRechargeModal();
+      loadUsers();
+      loadDashboard();
+    } else {
+      showToast(data.msg, 'error');
+    }
+  } catch (error) {
+    showLoginPage();
+  }
+}
+
+async function deleteUser(userId) {
+  if (!confirm('确定要删除该用户吗？此操作不可恢复。')) return;
+  try {
+    const response = await fetch(`${API_BASE}/admin/users/${userId}`, { method: 'DELETE', credentials: 'include' });
+    const data = await response.json();
+    if (data.code === 200) {
+      showToast('删除成功', 'success');
+      loadUsers();
+      loadDashboard();
+    } else {
+      showToast(data.msg, 'error');
+    }
+  } catch (error) {
+    showLoginPage();
+  }
+}
+
+function openEditModal(userId, username, name, phone, balance) {
+  document.getElementById('edit-user-id').value = userId;
+  document.getElementById('edit-username').value = username;
+  document.getElementById('edit-name').value = name;
+  document.getElementById('edit-phone').value = phone;
+  document.getElementById('edit-balance').value = balance;
+  document.getElementById('edit-modal').classList.add('active');
+}
+
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('active'); }
+
+async function doEditUser() {
+  const userId = document.getElementById('edit-user-id').value;
+  const name = document.getElementById('edit-name').value.trim();
+  const phone = document.getElementById('edit-phone').value.trim();
+  const balance = parseInt(document.getElementById('edit-balance').value);
+  
+  if (!name) { showToast('姓名不能为空', 'error'); return; }
+  if (!phone) { showToast('手机号不能为空', 'error'); return; }
+  if (!/^1[3-9]\d{9}$/.test(phone)) { showToast('手机号格式不正确', 'error'); return; }
+  if (isNaN(balance) || balance < 0) { showToast('积分必须大于等于0', 'error'); return; }
+  
+  try {
+    const response = await fetch(`${API_BASE}/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name, phone, balance })
+    });
+    const data = await response.json();
+    if (data.code === 200) {
+      showToast('修改成功', 'success');
+      closeEditModal();
+      loadUsers();
+      loadDashboard();
+    } else {
+      showToast(data.msg, 'error');
+    }
+  } catch (error) {
+    showToast('网络错误', 'error');
+  }
+}
+
+async function loadRecords() {
+  try {
+    const response = await fetch(`${API_BASE}/admin/records`, { credentials: 'include' });
+    const data = await response.json();
+    if (response.status === 401 || data.code === 401) {
+      showLoginPage();
+      return;
+    }
+    if (data.code === 200) {
+      const tbody = document.getElementById('records-table');
+      const typeNames = {
+        'image_generation': '图片生成',
+        'director_board': '超级编导·剧本生成分镜',
+        'director_effect_commercial': '超级编导·编导商用剧本研讨',
+        'director_shot_suggest': '超级编导·分镜描述建议',
+        'director_shot_optimize_desc': '超级编导·优化分镜描述',
+        'text_to_video': '超级编导·短剧工作流',
+        'image_to_video': '图生视频', 'video_analysis': '视频反推',
+        'script_generation': '文案创作', 'script_edit': '文案编辑',
+        'prompt_generation': '提示词生成', 'recharge': '充值'
+      };
+      const html = data.data.map(r => `
+        <tr>
+          <td class="px-6 py-4 text-sm">${r.id}</td>
+          <td class="px-6 py-4 text-sm">${escapeHtml(r.username)}</td>
+          <td class="px-6 py-4 text-sm text-purple-400">${escapeHtml(typeNames[r.type] || r.type)}</td>
+          <td class="px-6 py-4 text-sm ${r.cost < 0 ? 'text-green-400' : 'text-red-400'}">${r.cost < 0 ? '+' : '-'}${Math.abs(r.cost)}积分</td>
+          <td class="px-6 py-4 text-sm text-gray-400">${escapeHtml(r.created_at)}</td>
+        </tr>
+      `).join('');
+      tbody.innerHTML = html || '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-400">暂无记录</td></tr>';
+    }
+  } catch (error) {
+    showLoginPage();
+  }
+}
+
+async function loadApiConfig() {
+  try {
+    const response = await fetch(`${API_BASE}/admin/api-config`, { credentials: 'include' });
+    const data = await response.json();
+    if (response.status === 401 || data.code === 401) {
+      showLoginPage();
+      return;
+    }
+    if (data.code === 200) {
+      const config = data.data || {};
+      
+      if (config.llm) {
+        document.getElementById('api-llm-provider').value = config.llm.provider || 'openai-compatible';
+        document.getElementById('api-llm-model').value = config.llm.model || 'astron-code-latest';
+        document.getElementById('api-llm-key').value = config.llm.key || '';
+        document.getElementById('api-llm-endpoint').value = config.llm.endpoint || 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/v1/chat/completions';
+      }
+      const l2p = document.getElementById('api-llm2-provider');
+      if (l2p) {
+        if (config.llm2) {
+          l2p.value = config.llm2.provider || 'deepseek';
+          const l2m = document.getElementById('api-llm2-model');
+          if (l2m) l2m.value = config.llm2.model || 'deepseek-chat';
+          const l2k = document.getElementById('api-llm2-key');
+          if (l2k) l2k.value = config.llm2.key || '';
+          const l2e = document.getElementById('api-llm2-endpoint');
+          if (l2e) l2e.value = config.llm2.endpoint || '';
+        } else {
+          l2p.value = 'deepseek';
+          const l2m = document.getElementById('api-llm2-model');
+          if (l2m) l2m.value = 'deepseek-chat';
+          const l2k = document.getElementById('api-llm2-key');
+          if (l2k) l2k.value = '';
+          const l2e = document.getElementById('api-llm2-endpoint');
+          if (l2e) l2e.value = '';
+        }
+      }
+
+      if (config.image) {
+        const im = config.image;
+        document.getElementById('api-image-provider').value = im.provider || 'mock';
+        document.getElementById('api-image-key').value = im.key || '';
+        const bu = document.getElementById('api-image-base-url');
+        if (bu) bu.value = im.baseUrl || 'https://banana.aigenmedia.art';
+        const m = document.getElementById('api-image-model');
+        if (m) m.value = im.model || '';
+        const da = document.getElementById('api-image-default-aspect');
+        if (da) da.value = im.defaultAspect || '1:1';
+        const dr = document.getElementById('api-image-default-resolution');
+        if (dr) dr.value = (im.defaultResolution || '1K').toString().toUpperCase();
+        const gm = document.getElementById('api-image-gemini-model');
+        if (gm) gm.value = im.geminiModel || 'gemini-3-pro-image-preview';
+        const ga = document.getElementById('api-image-gemini-aspect');
+        if (ga) ga.value = im.geminiAspect || im.defaultAspect || '1:1';
+        const gs = document.getElementById('api-image-gemini-size');
+        if (gs) gs.value = (im.geminiImageSize || im.defaultResolution || '1K').toString().toUpperCase();
+      }
+      
+      if (config.video) {
+        let vp = config.video.provider || 'mock';
+        if (vp !== 'mock' && vp !== 'paiwo') vp = 'mock';
+        document.getElementById('api-video-provider').value = vp;
+        document.getElementById('api-video-key').value = config.video.key || '';
+        const vb = document.getElementById('api-video-base-url');
+        if (vb) vb.value = config.video.baseUrl || 'https://app-api.pixverseai.cn';
+        const vm = document.getElementById('api-video-model');
+        if (vm) vm.value = config.video.model || 'c1';
+        const vneg = document.getElementById('api-video-negative-prompt');
+        if (vneg) vneg.value = config.video.negativePrompt || config.video.negative_prompt || '';
+        const vseed = document.getElementById('api-video-seed');
+        if (vseed) vseed.value = config.video.seed != null && config.video.seed !== '' ? String(config.video.seed) : '';
+        const vw = document.getElementById('api-video-watermark');
+        if (vw) vw.checked = !!(config.video.waterMark || config.video.water_mark);
+        const vss = document.getElementById('api-video-sound-switch');
+        if (vss) vss.checked = !!(config.video.soundEffectSwitch || config.video.sound_effect_switch);
+        const vsc = document.getElementById('api-video-sound-content');
+        if (vsc) vsc.value = config.video.soundEffectContent || config.video.sound_effect_content || '';
+        const vq = document.getElementById('api-video-quality');
+        if (vq) vq.value = config.video.quality || '720p';
+        const vfq = document.getElementById('api-video-img2vid-final-quality');
+        if (vfq) {
+          vfq.value =
+            config.video.img2vidFinalQuality ||
+            config.video.img2vidPreviewQuality ||
+            config.video.finalQuality ||
+            '1080p';
+        }
+        const va = document.getElementById('api-video-aspect');
+        if (va) va.value = config.video.aspectRatio || config.video.aspect_ratio || '16:9';
+        const vmo = document.getElementById('api-video-motion');
+        if (vmo) vmo.value = config.video.motionMode || config.video.motion_mode || 'normal';
+        onVideoProviderChange();
+      }
+      
+      if (config.analyze) {
+        let ap = config.analyze.provider || 'dashscope';
+        if (ap === 'openai-compatible' || ap === 'llm') ap = 'dashscope';
+        const provEl = document.getElementById('api-analyze-provider');
+        if (provEl) provEl.value = ap === 'mock' ? 'mock' : 'dashscope';
+        document.getElementById('api-analyze-key').value = config.analyze.key || '';
+        const base = (config.analyze.openaiUrl || config.analyze.baseUrl || '').trim();
+        const ou = document.getElementById('api-analyze-openai-url');
+        if (ou) ou.value = base || ANALYZE_REGION_BASE.cn;
+        const regEl = document.getElementById('api-analyze-region');
+        if (regEl) {
+          if (base.includes('dashscope-intl')) regEl.value = 'intl';
+          else if (base.includes('dashscope-us')) regEl.value = 'us';
+          else regEl.value = 'cn';
+        }
+        const ae = document.getElementById('api-analyze-endpoint');
+        if (ae) ae.value = config.analyze.endpoint || '';
+        const am = document.getElementById('api-analyze-model');
+        if (am) am.value = config.analyze.model || config.analyze.modelId || 'qwen3-vl-plus';
+      }
+      onImageProviderChange();
+      onVideoProviderChange();
+    }
+  } catch (e) {}
+}
+
+async function saveLlmConfig() {
+  const provider = document.getElementById('api-llm-provider').value;
+  let endpoint = document.getElementById('api-llm-endpoint').value;
+  
+  // 如果选择自定义OpenAI兼容接口且未填写endpoint，使用默认值
+  if (provider === 'openai-compatible' && !endpoint) {
+    endpoint = 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/v1/chat/completions';
+  }
+
+  const p2 = document.getElementById('api-llm2-provider') ? document.getElementById('api-llm2-provider').value : 'deepseek';
+  let ep2 = document.getElementById('api-llm2-endpoint') ? document.getElementById('api-llm2-endpoint').value.trim() : '';
+  if (p2 === 'openai-compatible' && !ep2) {
+    ep2 = 'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2/v1/chat/completions';
+  }
+  
+  const config = {
+    llm: {
+      provider: provider,
+      model: document.getElementById('api-llm-model').value,
+      key: document.getElementById('api-llm-key').value,
+      endpoint: endpoint
+    },
+    llm2: {
+      provider: p2,
+      model: document.getElementById('api-llm2-model') ? document.getElementById('api-llm2-model').value : 'deepseek-chat',
+      key: document.getElementById('api-llm2-key') ? document.getElementById('api-llm2-key').value : '',
+      endpoint: ep2
+    }
+  };
+  
+  try {
+    await fetch(`${API_BASE}/admin/api-config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(config)
+    });
+    showToast('大模型配置已保存', 'success');
+    checkServiceStatus();
+  } catch (e) {
+    showToast('网络错误', 'error');
+  }
+}
+
+async function saveApiConfig(type) {
+  const config = {};
+  
+  if (type === 'image') {
+    const baseUrlEl = document.getElementById('api-image-base-url');
+    const modelEl = document.getElementById('api-image-model');
+    const daEl = document.getElementById('api-image-default-aspect');
+    const drEl = document.getElementById('api-image-default-resolution');
+    const gmEl = document.getElementById('api-image-gemini-model');
+    const gaEl = document.getElementById('api-image-gemini-aspect');
+    const gsEl = document.getElementById('api-image-gemini-size');
+    config.image = {
+      provider: document.getElementById('api-image-provider').value,
+      key: document.getElementById('api-image-key').value,
+      baseUrl: (baseUrlEl && baseUrlEl.value.trim()) || 'https://banana.aigenmedia.art',
+      model: modelEl ? modelEl.value.trim() : '',
+      defaultAspect: daEl ? daEl.value : '1:1',
+      defaultResolution: drEl ? drEl.value : '1K',
+      geminiModel: gmEl ? gmEl.value : 'gemini-3-pro-image-preview',
+      geminiAspect: gaEl ? gaEl.value : '1:1',
+      geminiImageSize: gsEl ? gsEl.value : '1K',
+    };
+  } else if (type === 'video') {
+    const vb = document.getElementById('api-video-base-url');
+    const vm = document.getElementById('api-video-model');
+    const vq = document.getElementById('api-video-quality');
+    const vfq = document.getElementById('api-video-img2vid-final-quality');
+    const va = document.getElementById('api-video-aspect');
+    const vmo = document.getElementById('api-video-motion');
+    const vneg = document.getElementById('api-video-negative-prompt');
+    const vseed = document.getElementById('api-video-seed');
+    const vw = document.getElementById('api-video-watermark');
+    const vss = document.getElementById('api-video-sound-switch');
+    const vsc = document.getElementById('api-video-sound-content');
+    const seedRaw = vseed && String(vseed.value || '').trim();
+    const seedNum = seedRaw === '' ? null : Number(seedRaw);
+    config.video = {
+      provider: document.getElementById('api-video-provider').value,
+      key: document.getElementById('api-video-key').value,
+      baseUrl: vb ? vb.value.trim() || 'https://app-api.pixverseai.cn' : 'https://app-api.pixverseai.cn',
+      model: vm ? vm.value.trim() || 'c1' : 'c1',
+      quality: vq ? vq.value : '720p',
+      img2vidPreviewQuality: vfq ? vfq.value : '1080p',
+      img2vidFinalQuality: vfq ? vfq.value : '1080p',
+      aspectRatio: va ? va.value : '16:9',
+      motionMode: vmo ? vmo.value : 'normal',
+      negativePrompt: vneg ? vneg.value.trim() : '',
+      seed: Number.isFinite(seedNum) ? Math.floor(seedNum) : null,
+      waterMark: vw ? !!vw.checked : false,
+      soundEffectSwitch: vss ? !!vss.checked : false,
+      soundEffectContent: vsc ? vsc.value.trim() : '',
+    };
+  } else if (type === 'analyze') {
+    const ouEl = document.getElementById('api-analyze-openai-url');
+    const aeEl = document.getElementById('api-analyze-endpoint');
+    const amEl = document.getElementById('api-analyze-model');
+    config.analyze = {
+      provider: document.getElementById('api-analyze-provider').value,
+      key: document.getElementById('api-analyze-key').value,
+      openaiUrl: ouEl ? ouEl.value.trim() : '',
+      endpoint: aeEl ? aeEl.value.trim() : '',
+      model: amEl ? amEl.value.trim() || 'qwen3-vl-plus' : 'qwen3-vl-plus',
+    };
+  }
+  
+  try {
+    await fetch(`${API_BASE}/admin/api-config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(config)
+    });
+    showToast(`${type === 'image' ? '图片' : type === 'video' ? '视频' : '视频反推'}API配置已保存`, 'success');
+    checkServiceStatus();
+  } catch (e) {
+    showToast('网络错误', 'error');
+  }
+}
+
+async function checkServiceStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/health`);
+    if (response.ok) {
+      document.getElementById('status-backend').innerHTML = '<i class="fa fa-check-circle"></i> 在线';
+      document.getElementById('status-backend').className = 'text-green-400';
+    }
+  } catch (e) {
+    document.getElementById('status-backend').innerHTML = '<i class="fa fa-times-circle"></i> 离线';
+    document.getElementById('status-backend').className = 'text-red-400';
+  }
+  
+  try {
+    const response = await fetch(`${API_BASE}/admin/api-config`, { credentials: 'include' });
+    const data = await response.json();
+    const config = (data && data.data) || {};
+    
+    // LLM：须同时有 provider 与 API Key；仅填地址无 Key 时前端仍不可用
+    const llmEl = document.getElementById('status-llm-api');
+    if (config.llm && config.llm.provider) {
+      const hasKey = !!(config.llm.key && String(config.llm.key).trim());
+      if (hasKey) {
+        llmEl.innerHTML =
+          '<i class="fa fa-check-circle"></i> 已配置 · ' + escapeHtml(config.llm.model || 'unknown');
+        llmEl.className = 'text-green-400';
+      } else {
+        llmEl.innerHTML =
+          '<i class="fa fa-exclamation-circle"></i> 未填 API Key（保存后仍不可用）';
+        llmEl.className = 'text-amber-400';
+      }
+    }
+    const llm2El = document.getElementById('status-llm2-api');
+    if (llm2El && config.llm2 && config.llm2.provider) {
+      const k2 = !!(config.llm2.key && String(config.llm2.key).trim());
+      if (k2) {
+        llm2El.innerHTML =
+          '<i class="fa fa-check-circle"></i> 已配置 · ' + escapeHtml(config.llm2.provider || '') + ' / ' + escapeHtml(config.llm2.model || '');
+        llm2El.className = 'text-green-400';
+      } else {
+        llm2El.innerHTML = '<i class="fa fa-minus-circle"></i> 未填 Key（主挂时不会自动切换）';
+        llm2El.className = 'text-gray-500';
+      }
+    } else if (llm2El) {
+      llm2El.innerHTML = '<i class="fa fa-question-circle"></i> 无 2 号配置';
+      llm2El.className = 'text-yellow-400';
+    }
+    
+    // 图片API状态
+    if (config.image && config.image.provider && config.image.provider !== 'mock') {
+      const ip = config.image.provider;
+      const lab =
+        ip === 'nano_banana_openai'
+          ? 'Nano Banana (OpenAI)'
+          : ip === 'nano_banana_gemini'
+            ? 'Nano Banana (Gemini)'
+            : escapeHtml(ip);
+      document.getElementById('status-image-api').innerHTML =
+        '<i class="fa fa-check-circle"></i> 已配置 · ' + lab;
+      document.getElementById('status-image-api').className = 'text-green-400';
+    }
+    
+    // 视频API状态
+    if (config.video && config.video.provider && config.video.provider !== 'mock') {
+      const vp = config.video.provider;
+      const lab = vp === 'paiwo' ? '拍我AI' : escapeHtml(vp);
+      document.getElementById('status-video-api').innerHTML =
+        '<i class="fa fa-check-circle"></i> 已配置 · ' + lab + (config.video.key ? '' : '（未填 Key）');
+      document.getElementById('status-video-api').className = config.video.key ? 'text-green-400' : 'text-amber-400';
+    }
+
+    const sa = document.getElementById('status-analyze-api');
+    if (sa && config.analyze) {
+      const ap = config.analyze.provider || 'mock';
+      if (ap === 'mock') {
+        sa.innerHTML = '<i class="fa fa-info-circle"></i> 模拟模式';
+        sa.className = 'text-slate-400';
+      } else if (config.analyze.key) {
+        sa.innerHTML =
+          '<i class="fa fa-check-circle"></i> 已配置 · ' +
+          escapeHtml(config.analyze.model || 'qwen3-vl-plus');
+        sa.className = 'text-green-400';
+      } else {
+        sa.innerHTML = '<i class="fa fa-exclamation-circle"></i> 待填写 API Key 或切为模拟';
+        sa.className = 'text-amber-400';
+      }
+    }
+  } catch (e) {}
+}
+
+async function changePassword() {
+  const current = document.getElementById('current-password').value;
+  const newPwd = document.getElementById('new-password').value;
+  const confirm = document.getElementById('confirm-password').value;
+  
+  if (!current || !newPwd) {
+    showToast('请填写完整', 'error');
+    return;
+  }
+  
+  if (newPwd !== confirm) {
+    showToast('两次密码不一致', 'error');
+    return;
+  }
+  
+  if (newPwd.length < 6) {
+    showToast('新密码至少6位', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${API_BASE}/admin/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ current_password: current, new_password: newPwd })
+    });
+    const data = await response.json();
+    if (data.code === 200) {
+      showToast('密码修改成功', 'success');
+      document.getElementById('current-password').value = '';
+      document.getElementById('new-password').value = '';
+      document.getElementById('confirm-password').value = '';
+    } else {
+      showToast(data.msg || '修改失败', 'error');
+    }
+  } catch (error) {
+    showToast('网络错误', 'error');
+  }
+}
+
+function showToast(message, type) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = `toast ${type}`;
+  toast.classList.add('show');
+  setTimeout(() => { toast.classList.remove('show'); }, 3000);
+}
+</script>
+
+</body>
+</html>

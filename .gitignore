@@ -1,0 +1,15 @@
+node_modules/
+data/
+uploads/
+.env
+.env.*
+!.env.example
+*.log
+backups/
+.DS_Store
+Thumbs.db
+*.pem
+*.key
+.cursor/
+*.swp
+*.tmp

@@ -1,0 +1,16 @@
+services:
+  xunyu:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET:-please-change-this-long-secret}
+      PORT: 3000
+    volumes:
+      - xunyu-data:/app/data
+      - xunyu-uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  xunyu-data:
+  xunyu-uploads:
